@@ -16,6 +16,7 @@ import { Sheet } from '../../ui/Sheet'
 import { useToast } from '../../ui/Toast'
 import { usePlanContext } from '../hooks'
 import { AddFoodSheet, MEAL_TYPES, SourceTag, type AddMode } from './AddFoodSheet'
+import { mealLabel } from '../../domain/nutrition/ideas'
 import { IdeasSheet, useMealBudget } from './IdeasSheet'
 import { DAY_TYPE_LABEL, MacroSummary } from './MacroSummary'
 import { useDayNutrition, useNutritionBootstrap } from './useNutrition'
@@ -33,7 +34,7 @@ export function FoodScreen() {
     meals,
     nextMeal,
   )
-  const nextMealLabel = nextMeal === 'entreno' ? 'el entreno' : nextMeal === 'snack' ? 'picar algo' : `el ${nextMeal}`
+  const nextMealLabel = mealLabel(nextMeal)
   const toast = useToast()
   useNutritionBootstrap()
 

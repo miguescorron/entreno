@@ -5,6 +5,11 @@ import { normalize, type Macros } from './foods'
 
 export type MealType = 'desayuno' | 'comida' | 'cena' | 'snack' | 'entreno'
 
+/** «el desayuno», «la comida», «la cena»… con el artículo correcto. */
+export function mealLabel(m: MealType): string {
+  return { desayuno: 'el desayuno', comida: 'la comida', cena: 'la cena', snack: 'picar algo', entreno: 'tomar alrededor del entreno' }[m]
+}
+
 /** Reparto orientativo del día entre comidas principales y picoteo. */
 const SHARE: Record<MealType, number> = { desayuno: 0.25, comida: 0.35, cena: 0.3, snack: 0.1, entreno: 0.1 }
 

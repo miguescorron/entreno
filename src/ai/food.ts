@@ -3,6 +3,7 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { z } from 'zod'
 import { blobToBase64 } from '../lib/image'
 import { getClient, getMainModel, MODEL_FAST } from './client'
+import { structured } from './structured'
 
 // Calculadora de macros por imagen o texto (spec §9). El modelo devuelve
 // JSON estricto y se valida con zod antes de guardar nada.
@@ -61,10 +62,7 @@ Devuelve los valores por 100 g (o 100 ml). Si la etiqueta solo da valores por ra
 racion_g: tamaño de la ración indicado en la etiqueta, o 0 si no aparece.
 Si la imagen no es una etiqueta nutricional, es_etiqueta = false y el resto a 0 o vacío.`
 
-function assertNotRefused(msg: { stop_reason: string | null }) {
-  if (msg.stop_reason === 'refusal') throw new Error('El modelo no ha podido analizar esta petición. Prueba con otra foto o descríbelo con texto.')
-  if (msg.stop_reason === 'max_tokens') throw new Error('La respuesta se ha cortado. Prueba con menos platos a la vez.')
-}
+const REFUSAL = { refusal: 'El modelo no ha podido analizar esta petición. Prueba con otra foto o descríbelo con texto.' }
 
 async function imageBlock(photo: Blob): Promise<Anthropic.Beta.BetaImageBlockParam> {
   return { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: await blobToBase64(photo) } }
@@ -75,46 +73,55 @@ export async function estimateFromPhoto(photo: Blob, opts: { reference?: string;
   const client = await getClient()
   const model = await getMainModel()
   const hints = [opts.reference && `Objeto de referencia en la foto: ${opts.reference}.`, opts.note && `Nota del usuario: ${opts.note}`].filter(Boolean).join('\n')
-  const msg = await client.beta.messages.parse({
-    model,
-    max_tokens: 4000,
-    // Si el modelo declina por política, el servidor reintenta con su fallback por defecto
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    output_config: { effort: 'medium', format: betaZodOutputFormat(EstimacionSchema) },
-    system: SYSTEM_PLATOS,
-    messages: [{ role: 'user', content: [await imageBlock(photo), { type: 'text', text: `Estima los platos de esta foto.${hints ? `\n${hints}` : ''}` }] }],
-  })
-  assertNotRefused(msg)
-  return EstimacionSchema.parse(msg.parsed_output)
+  return structured(
+    client,
+    {
+      model,
+      max_tokens: 16000,
+      // Si el modelo declina por política, el servidor reintenta con su fallback por defecto
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'medium', format: betaZodOutputFormat(EstimacionSchema) },
+      system: SYSTEM_PLATOS,
+      messages: [{ role: 'user', content: [await imageBlock(photo), { type: 'text', text: `Estima los platos de esta foto.${hints ? `\n${hints}` : ''}` }] }],
+    },
+    EstimacionSchema,
+    REFUSAL,
+  )
 }
 
 /** Texto o dictado ("dos tostadas con aceite y jamón y un café con leche") → platos. */
 export async function estimateFromText(text: string): Promise<Estimacion> {
   const client = await getClient()
-  const msg = await client.beta.messages.parse({
-    model: MODEL_FAST,
-    max_tokens: 3000,
-    output_config: { effort: 'low', format: betaZodOutputFormat(EstimacionSchema) },
-    system: SYSTEM_PLATOS,
-    messages: [{ role: 'user', content: `Estima lo que he comido: ${text}` }],
-  })
-  assertNotRefused(msg)
-  return EstimacionSchema.parse(msg.parsed_output)
+  return structured(
+    client,
+    {
+      model: MODEL_FAST,
+      max_tokens: 16000,
+      output_config: { effort: 'low', format: betaZodOutputFormat(EstimacionSchema) },
+      system: SYSTEM_PLATOS,
+      messages: [{ role: 'user', content: `Estima lo que he comido: ${text}` }],
+    },
+    EstimacionSchema,
+    REFUSAL,
+  )
 }
 
 /** Foto de la etiqueta nutricional → valores por 100 g. */
 export async function readLabel(photo: Blob): Promise<Etiqueta> {
   const client = await getClient()
-  const msg = await client.beta.messages.parse({
-    model: MODEL_FAST,
-    max_tokens: 1500,
-    output_config: { effort: 'low', format: betaZodOutputFormat(EtiquetaSchema) },
-    system: SYSTEM_ETIQUETA,
-    messages: [{ role: 'user', content: [await imageBlock(photo), { type: 'text', text: 'Lee esta etiqueta nutricional.' }] }],
-  })
-  assertNotRefused(msg)
-  return EtiquetaSchema.parse(msg.parsed_output)
+  return structured(
+    client,
+    {
+      model: MODEL_FAST,
+      max_tokens: 16000,
+      output_config: { effort: 'low', format: betaZodOutputFormat(EtiquetaSchema) },
+      system: SYSTEM_ETIQUETA,
+      messages: [{ role: 'user', content: [await imageBlock(photo), { type: 'text', text: 'Lee esta etiqueta nutricional.' }] }],
+    },
+    EtiquetaSchema,
+    REFUSAL,
+  )
 }
 
 /** Normaliza lo que devuelve el modelo (rangos al revés, negativos, confianza fuera de 0-1). */

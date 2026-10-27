@@ -1,6 +1,7 @@
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { z } from 'zod'
 import { getClient, getMainModel } from '../ai/client'
+import { structured } from '../ai/structured'
 import { COACH_BASE_PROMPT, profileBlock } from '../ai/coach/prompt'
 import { addDays, todayISO, weekdayIndex, weekNumberFor, weekStart, type ISODate } from '../domain/dates'
 import { fmtMin } from '../domain/plan/generator'
@@ -107,16 +108,19 @@ export async function generateReview(profile: Profile, week: number, today = tod
   const model = await getMainModel()
   const data = await reviewInput(profile, week, today)
   const supportsFallback = model.startsWith('claude-sonnet') || model.startsWith('claude-opus')
-  const msg = await client.beta.messages.parse({
-    model,
-    max_tokens: 6000,
-    output_config: { effort: 'medium', format: betaZodOutputFormat(ReviewSchema) },
-    system: `${COACH_BASE_PROMPT}\n\n${profileBlock(profile, today)}`,
-    messages: [{ role: 'user', content: `${REVIEW_INSTRUCTIONS}\n\nDatos:\n${JSON.stringify(data)}` }],
-    ...(supportsFallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
-  })
-  if (msg.stop_reason === 'refusal') throw new Error('No se ha podido generar la revisión.')
-  const out = ReviewSchema.parse(msg.parsed_output)
+  const out = await structured(
+    client,
+    {
+      model,
+      max_tokens: 16000,
+      output_config: { effort: 'medium', format: betaZodOutputFormat(ReviewSchema) },
+      system: `${COACH_BASE_PROMPT}\n\n${profileBlock(profile, today)}`,
+      messages: [{ role: 'user', content: `${REVIEW_INSTRUCTIONS}\n\nDatos:\n${JSON.stringify(data)}` }],
+      ...(supportsFallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+    },
+    ReviewSchema,
+    { refusal: 'No se ha podido generar la revisión.' },
+  )
   return saveReview(week, out, data.semaforo?.light)
 }
 

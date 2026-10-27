@@ -7,7 +7,7 @@ import { db, getSetting, setSetting, type MealLog } from '../../db/db'
 import { addMeals, mealTypeForNow, saveTemplate } from '../../db/food'
 import { addDays, type ISODate } from '../../domain/dates'
 import { fmt1, type Macros } from '../../domain/nutrition/foods'
-import { mealBudget, type MealType } from '../../domain/nutrition/ideas'
+import { mealBudget, mealLabel, type MealType } from '../../domain/nutrition/ideas'
 import type { DayType } from '../../domain/nutrition/targets'
 import { Button } from '../../ui/Button'
 import { Chips, Field, NumberInput, Switch } from '../../ui/Controls'
@@ -109,7 +109,7 @@ export function IdeasSheet({ open, onClose, date, remaining, meals, dayType }: P
             <div className="grow" style={{ minWidth: 0 }}>
               <div className="t-headline num">≈ {budget.kcal.toLocaleString('es-ES')} kcal</div>
               <div className="t-foot muted num">
-                Mínimo {budget.protein} g de proteína · lo que te queda para {mealType === 'entreno' ? 'el entreno' : `el ${mealType}`}
+                Mínimo {budget.protein} g de proteína · lo que te queda para {mealLabel(mealType)}
               </div>
             </div>
             <div style={{ width: 132, flex: 'none' }}>
