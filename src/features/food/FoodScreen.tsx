@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import { db, type MealLog } from '../../db/db'
-import { addWater, saveTemplate } from '../../db/food'
+import { addWater, mealTypeForNow, saveTemplate } from '../../db/food'
 import { addDays, formatDayLong, weekNumberFor, type ISODate } from '../../domain/dates'
 import { fmt1, scaleMacros, sumMacros } from '../../domain/nutrition/foods'
 import { fuelingAdvice } from '../../domain/nutrition/targets'
@@ -16,6 +16,7 @@ import { Sheet } from '../../ui/Sheet'
 import { useToast } from '../../ui/Toast'
 import { usePlanContext } from '../hooks'
 import { AddFoodSheet, MEAL_TYPES, SourceTag, type AddMode } from './AddFoodSheet'
+import { IdeasSheet, useMealBudget } from './IdeasSheet'
 import { DAY_TYPE_LABEL, MacroSummary } from './MacroSummary'
 import { useDayNutrition, useNutritionBootstrap } from './useNutrition'
 
@@ -25,6 +26,14 @@ export function FoodScreen() {
   const [adding, setAdding] = useState<AddMode | null>(null)
   const [editing, setEditing] = useState<MealLog | null>(null)
   const { targets, meals, eaten, water, adjustment } = useDayNutrition(date)
+  const [ideas, setIdeas] = useState(false)
+  const nextMeal = mealTypeForNow()
+  const nextBudget = useMealBudget(
+    { kcal: (targets?.kcal ?? 0) - eaten.kcal, protein: (targets?.proteinG ?? 0) - eaten.protein, carbs: (targets?.carbsG ?? 0) - eaten.carbs, fat: (targets?.fatG ?? 0) - eaten.fat },
+    meals,
+    nextMeal,
+  )
+  const nextMealLabel = nextMeal === 'entreno' ? 'el entreno' : nextMeal === 'snack' ? 'picar algo' : `el ${nextMeal}`
   const toast = useToast()
   useNutritionBootstrap()
 
@@ -86,6 +95,21 @@ export function FoodScreen() {
           <QuickTile icon="mic" label="Texto o voz" onClick={() => setAdding('text')} />
         </div>
 
+        {targets && date === today && (
+          <Pressable className="card row" style={{ border: 0, textAlign: 'left', width: '100%' }} onClick={() => setIdeas(true)}>
+            <span className="sport-badge" style={{ background: 'var(--orange)', width: 40, height: 40, borderRadius: 12 }}>
+              <Icon name="bolt" size={22} strokeWidth={2} />
+            </span>
+            <div className="grow">
+              <div className="t-headline">¿No sabes qué comer?</div>
+              <div className="t-sub muted num">
+                Ideas rápidas para {nextMealLabel} con ≈ {nextBudget.kcal.toLocaleString('es-ES')} kcal
+              </div>
+            </div>
+            <Icon name="chevronRight" size={18} className="chevron" />
+          </Pressable>
+        )}
+
         {byMeal.map((g) => (
           <MealGroup
             key={g.value}
@@ -105,6 +129,16 @@ export function FoodScreen() {
         {targets && <WaterCard date={date} total={water} target={targets.waterMl} />}
       </div>
 
+      {targets && (
+        <IdeasSheet
+          open={ideas}
+          onClose={() => setIdeas(false)}
+          date={date}
+          remaining={{ kcal: targets.kcal - eaten.kcal, protein: targets.proteinG - eaten.protein, carbs: targets.carbsG - eaten.carbs, fat: targets.fatG - eaten.fat }}
+          meals={meals}
+          dayType={targets.dayType}
+        />
+      )}
       <AddFoodSheet open={!!adding} onClose={() => setAdding(null)} date={date} initialMode={adding ?? 'menu'} />
       <MealEditSheet meal={editing} onClose={() => setEditing(null)} />
     </Screen>
