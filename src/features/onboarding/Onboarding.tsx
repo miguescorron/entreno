@@ -5,9 +5,8 @@ import { regeneratePlan } from '../../db/plan'
 import { todayISO } from '../../domain/dates'
 import { Button } from '../../ui/Button'
 import { spring } from '../../ui/motion'
-import { DEFAULT_PROFILE, ProfileSection, SECTIONS, validateSection, type ProfileDraft } from '../profile/ProfileForm'
-
-const STEPS = ['welcome', ...SECTIONS.map((s) => s.key)] as const
+import { isEventGoal } from '../../domain/goals'
+import { DEFAULT_PROFILE, planStartMonday, ProfileSection, sectionsFor, validateSection, type ProfileDraft } from '../profile/ProfileForm'
 
 export function Onboarding() {
   const [step, setStep] = useState(0)
@@ -16,8 +15,11 @@ export function Onboarding() {
   const [busy, setBusy] = useState(false)
   const reduce = useReducedMotion()
 
-  const key = STEPS[step]
-  const section = SECTIONS.find((s) => s.key === key)
+  // Los pasos dependen del objetivo elegido (natación y bici solo para triatlón)
+  const sections = sectionsFor(draft)
+  const STEPS = ['welcome', ...sections.map((s) => s.key)]
+  const key = STEPS[Math.min(step, STEPS.length - 1)]
+  const section = sections.find((s) => s.key === key)
   const error = section ? validateSection(section.key, draft) : null
   const last = step === STEPS.length - 1
 
@@ -29,7 +31,16 @@ export function Onboarding() {
 
   const finish = async () => {
     setBusy(true)
-    const profile = { ...draft, createdAt: new Date().toISOString() }
+    const goal = draft.goal!
+    // Objetivos sin fecha y carreras: el plan empieza este lunes (o el que viene si ya es jueves)
+    const withStart = goal.type === 'triathlon' ? goal : { ...goal, startDate: planStartMonday() }
+    const profile = {
+      ...draft,
+      goal: withStart,
+      raceName: isEventGoal(goal) ? goal.eventName ?? '' : '',
+      raceDate: isEventGoal(goal) ? goal.eventDate ?? '' : '',
+      createdAt: new Date().toISOString(),
+    }
     const id = await db.profile.add(profile)
     await db.bodyLogs.add({ date: todayISO(), weightKg: draft.startWeightKg, note: 'Peso inicial' })
     await regeneratePlan({ ...profile, id })
@@ -109,16 +120,16 @@ function Welcome() {
   return (
     <div className="stack-lg">
       <div>
-        <div className="t-sub muted">Objetivo · octubre 2027</div>
+        <div className="t-sub muted">Entrenamiento y alimentación</div>
         <h1 className="t-large-title" style={{ margin: '4px 0 10px' }}>
-          Gandía 70.3
+          Tu plan, a tu medida
         </h1>
         <p className="t-body" style={{ margin: 0 }}>
-          1,9 km nadando, 90 km en bici y 21,1 km corriendo. 51 semanas para llegar a meta <b>sano y sin lesiones</b>.
+          Fuerza, perder peso, una carrera, Hyrox o un triatlón: el plan se adapta a <b>tu objetivo, tu nivel y tu tiempo</b>, con cada ejercicio explicado.
         </p>
       </div>
       <div className="card stack">
-        <Point icon="🐢" title="Constancia antes que intensidad" text="El 80 % del volumen, suave. +10 % por semana como mucho y descarga cada 4ª semana." />
+        <Point icon="🐢" title="Constancia antes que intensidad" text="Progresión gradual y descarga cada 4ª semana para avanzar sin lesionarte." />
         <Point icon="✋" title="Te frenaré cuando toque" text="Si subes demasiado rápido, te avisaré y te pediré confirmación." />
         <Point icon="🔒" title="Tus datos se quedan en el móvil" text="Solo se enviará a Claude lo imprescindible de cada consulta." />
       </div>

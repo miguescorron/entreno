@@ -15,9 +15,9 @@ export default defineConfig(({ mode }) => ({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'icon-180.png'],
       manifest: {
-        name: 'Entreno 70.3',
+        name: 'Entreno',
         short_name: 'Entreno',
-        description: 'Entrenamiento y nutrición hacia el ICAN Gandía 70.3',
+        description: 'Tu plan de entrenamiento y alimentación',
         lang: 'es-ES',
         start_url: './',
         scope: './',

@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type { ISODate } from '../domain/dates'
-import type { Phase, SessionStatus, SessionStructure, Sport, TestType } from '../domain/types'
+import type { Goal, HomeEquipment, Level } from '../domain/goals'
+import type { Phase, SessionStatus, SessionStructure, Sport, TestType, WorkoutBlock } from '../domain/types'
 
 // Modelo de datos de la spec §5 sobre IndexedDB (Dexie).
 // Las migraciones se versionan con db.version(n).
@@ -33,6 +34,12 @@ export interface Profile {
   dietNotes: string
   mealTimes: string
   createdAt: string
+  /** Objetivo; los perfiles antiguos sin objetivo son el triatlón 70.3 */
+  goal?: Goal
+  level?: Level
+  equipment?: HomeEquipment
+  /** Minutos que puede dedicar a cada sesión */
+  sessionMinutes?: number
 }
 
 export interface PlanWeek {
@@ -59,6 +66,7 @@ export interface PlanSession {
   optional?: boolean
   test?: TestType
   key?: boolean
+  blocks?: WorkoutBlock[]
   status: SessionStatus
   movedFromDate?: ISODate
 }

@@ -1,13 +1,14 @@
 import type { Profile } from '../../db/db'
 import { ageOn, formatDate, type ISODate } from '../../domain/dates'
+import { EQUIPMENT_LABEL, goalOf, goalSummary, LEVEL_LABEL } from '../../domain/goals'
 
 // System prompt base del coach (spec §8.2). Constante editable.
-export const COACH_BASE_PROMPT = `Eres el entrenador personal de un triatleta aficionado. Su objetivo es terminar su carrera objetivo (la del perfil) sin lesionarse.
-Contexto: principiante, con los datos de partida que indica el perfil, y con poco tiempo libre.
+export const COACH_BASE_PROMPT = `Eres entrenador personal y nutricionista deportivo. Entrenas a una persona con el objetivo que indica su perfil (fuerza y tono, perder peso, una carrera a pie, Hyrox o un triatlón), y quieres que lo consiga sin lesionarse.
+Contexto: los datos de partida, el nivel y el material están en el perfil. Tiene poco tiempo libre.
 Estilo: español de España, directo, cercano, breve. Un consejo concreto por respuesta. Preguntas de seguimiento solo si son necesarias.
 
 Reglas:
-1. Constancia antes que intensidad. Sube el volumen un 10% como máximo por semana. Descarga cada 4ª semana.
+1. Constancia antes que intensidad. Sube el volumen (o la carga) un 10% como máximo por semana. Descarga cada 4ª semana. En fuerza, la técnica va antes que el peso.
 2. Es ambicioso y tiende a pasarse. Si propone aumentar carga demasiado rápido, hacer doble sesión repetida o recortar calorías de forma agresiva, díselo con claridad y propón una alternativa.
 3. Dolor: si dice dolor ≥ 4/10 que dura más de 2 días, o dolor agudo/articular, reduce o sustituye la sesión y recomienda valoración profesional. No diagnostiques.
 4. Señales de alarma (dolor en el pecho, mareo, desmayo, palpitaciones raras, falta de aire anormal, dolor de cabeza intenso tras esfuerzo): indica parar y consultar con un médico. No sigas con el plan hasta entonces.
@@ -33,10 +34,11 @@ export function profileBlock(p: Profile, today: ISODate): string {
     `Perfil del atleta (a fecha ${formatDate(today)}):`,
     p.name && `- Se llama ${p.name}.`,
     `- ${p.sex === 'male' ? 'Hombre' : 'Mujer'}, ${p.birthDate ? `${ageOn(p.birthDate, today)} años` : 'edad sin indicar'}, ${p.heightCm} cm, peso inicial ${p.startWeightKg} kg, objetivo orientativo ${p.goalWeightKg} kg.`,
-    `- Carrera: ${p.raceName}, ${formatDate(p.raceDate)}.`,
-    `- Disponibilidad: hasta ${p.weeklyHoursAvailable} h/semana; prefiere entrenar ${p.preferredTime}.`,
-    `- Natación: crol ${({ no: 'no sabe', basic: 'básico', good: 'bien' } as const)[p.swimCrawl]}, ${p.swimContinuousM} m seguidos; piscina cerca: ${p.poolNearby ? 'sí' : 'no'}.`,
-    `- Bici: ${p.bikeType}; casco: ${p.hasHelmet ? 'sí' : 'no'}; rodillo: ${p.hasTrainer ? 'sí' : 'no'}. Reloj: ${p.device}.`,
+    `- Objetivo: ${goalSummary(goalOf(p), formatDate)}.`,
+    `- Nivel: ${LEVEL_LABEL[p.level ?? 'beginner']}. Entrena la fuerza en: ${EQUIPMENT_LABEL[p.equipment ?? 'dumbbells']}.`,
+    `- Disponibilidad: ${p.availableDays.length} días por semana, unos ${p.sessionMinutes ?? 45} min por sesión (máx. ${p.weeklyHoursAvailable} h/semana); prefiere entrenar ${p.preferredTime}.`,
+    goalOf(p).type === 'triathlon' && `- Natación: crol ${({ no: 'no sabe', basic: 'básico', good: 'bien' } as const)[p.swimCrawl]}, ${p.swimContinuousM} m seguidos; piscina cerca: ${p.poolNearby ? 'sí' : 'no'}.`,
+    goalOf(p).type === 'triathlon' && `- Bici: ${p.bikeType}; casco: ${p.hasHelmet ? 'sí' : 'no'}; rodillo: ${p.hasTrainer ? 'sí' : 'no'}. Reloj: ${p.device}.`,
     `- Chequeo médico con prueba de esfuerzo: ${p.medicalCheckDone ? 'hecho' : 'pendiente'}.`,
     p.injuriesNotes && `- Lesiones previas: ${p.injuriesNotes}`,
     p.allergies && `- Alergias/intolerancias: ${p.allergies}`,

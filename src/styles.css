@@ -31,6 +31,8 @@
   --walk: #30b0c7;
   --brick: #5856d6;
   --race: #ffcc00;
+  --hyrox: #ff9500;
+  --cardio: #30b0c7;
   --other: #8e8e93;
 
   --phase-base: #30b0c7;
@@ -88,6 +90,8 @@
     --walk: #40c8e0;
     --brick: #5e5ce6;
     --race: #ffd60a;
+    --hyrox: #d67700;
+    --cardio: #40c8e0;
     --macro-protein: #7d7aff;
     --macro-carbs: #d67700;
     --macro-fat: #239fb6;
@@ -120,6 +124,8 @@
   --walk: #40c8e0;
   --brick: #5e5ce6;
   --race: #ffd60a;
+  --hyrox: #d67700;
+  --cardio: #40c8e0;
   --macro-protein: #7d7aff;
   --macro-carbs: #d67700;
   --macro-fat: #239fb6;
@@ -421,3 +427,5 @@ input[type='range'].rpe { width: 100%; accent-color: var(--tint); height: 32px; 
 .chart-table th, .chart-table td { text-align: right; padding: 4px 6px; border-bottom: 0.5px solid var(--separator); white-space: nowrap; }
 .chart-table th:first-child, .chart-table td:first-child { text-align: left; }
 .light-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px var(--bg-elevated); }
+
+a.btn { text-decoration: none; }

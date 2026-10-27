@@ -10,7 +10,6 @@ import {
   formatDayShort,
   formatMonth,
   mondayOf,
-  PLAN_WEEKS,
   WEEKDAYS,
   WEEKDAYS_SHORT,
   weekNumberFor,
@@ -19,7 +18,9 @@ import {
 } from '../../domain/dates'
 import { MILESTONES, PREP_EVENTS } from '../../domain/milestones'
 import { fmtMin, phaseForWeek, weekLoadMin } from '../../domain/plan/generator'
-import { PHASE_LABEL, type Phase } from '../../domain/types'
+import type { Phase } from '../../domain/types'
+import { goalSummary, isEventGoal, type GoalType } from '../../domain/goals'
+import { phaseName } from '../../db/plan'
 import { Pressable } from '../../ui/Button'
 import { Segmented } from '../../ui/Controls'
 import { Icon } from '../../ui/Icon'
@@ -32,13 +33,14 @@ import { useSheets } from '../logs/useSheets'
 type View = 'week' | 'month' | 'phases'
 
 export function PlanScreen() {
-  const { profile, today, planStart, currentWeek } = usePlanContext()
+  const { today, planStart, currentWeek, goal, planWeeks } = usePlanContext()
   const [view, setView] = useState<View>('week')
   const { open, sheets } = useSheets(planStart, today)
-  const daysToRace = diffDays(profile.raceDate, today)
+  const eventDate = isEventGoal(goal) ? goal.eventDate : undefined
+  const eyebrow = eventDate ? `Faltan ${diffDays(eventDate, today)} días · ${formatDate(eventDate)}` : `${goalSummary(goal, formatDate)} · ${planWeeks} semanas`
 
   return (
-    <Screen title="Plan" eyebrow={`Faltan ${daysToRace} días · ${formatDate(profile.raceDate)}`}>
+    <Screen title="Plan" eyebrow={eyebrow}>
       <div className="stack-lg">
         <Segmented
           value={view}
@@ -49,7 +51,7 @@ export function PlanScreen() {
             { value: 'phases', label: 'Fases e hitos' },
           ]}
         />
-        {view === 'week' && <WeekView planStart={planStart} today={today} initialWeek={currentWeek ?? 1} onOpen={(s) => open('session', s)} />}
+        {view === 'week' && <WeekView planStart={planStart} today={today} initialWeek={currentWeek ?? 1} weeks={planWeeks} onOpen={(s) => open('session', s)} />}
         {view === 'month' && <MonthView planStart={planStart} today={today} onOpen={(s) => open('session', s)} />}
         {view === 'phases' && <PhasesView planStart={planStart} currentWeek={currentWeek} />}
       </div>
@@ -60,7 +62,8 @@ export function PlanScreen() {
 
 // ---------- Semana ----------
 
-function WeekView({ planStart, today, initialWeek, onOpen }: { planStart: ISODate; today: ISODate; initialWeek: number; onOpen: (s: PlanSession) => void }) {
+function WeekView({ planStart, today, initialWeek, weeks, onOpen }: { planStart: ISODate; today: ISODate; initialWeek: number; weeks: number; onOpen: (s: PlanSession) => void }) {
+  const { profile } = usePlanContext()
   const [n, setN] = useState(initialWeek)
   const [dir, setDir] = useState(0)
   const reduce = useReducedMotion()
@@ -70,7 +73,7 @@ function WeekView({ planStart, today, initialWeek, onOpen }: { planStart: ISODat
   }, [n])
 
   const go = (d: number) => {
-    const next = Math.min(PLAN_WEEKS, Math.max(1, n + d))
+    const next = Math.min(weeks, Math.max(1, n + d))
     if (next === n) return
     setDir(d)
     setN(next)
@@ -98,13 +101,13 @@ function WeekView({ planStart, today, initialWeek, onOpen }: { planStart: ISODat
         <div style={{ textAlign: 'center' }}>
           <div className="t-headline num">
             Semana {n}
-            {data?.info && <span style={{ color: phaseColor(data.info.phase) }}> · {PHASE_LABEL[data.info.phase]}</span>}
+            {data?.info && <span style={{ color: phaseColor(data.info.phase) }}> · {phaseName(profile, data.info.phase)}</span>}
           </div>
           <div className="t-foot muted num">
             {formatDayShort(start)} – {formatDayShort(addDays(start, 6))}
           </div>
         </div>
-        <button className="icon-btn" onClick={() => go(1)} disabled={n === PLAN_WEEKS} aria-label="Semana siguiente">
+        <button className="icon-btn" onClick={() => go(1)} disabled={n === weeks} aria-label="Semana siguiente">
           <Icon name="chevronRight" size={20} />
         </button>
       </div>
@@ -214,7 +217,7 @@ function MonthView({ planStart, today, onOpen }: { planStart: ISODate; today: IS
             <div key={d} className="dow t-caption muted">{d}</div>
           ))}
           {visibleCells.map((d) => {
-            const wn = weekNumberFor(planStart, d)
+            const wn = weekNumberFor(planStart, d, weeks?.length || 52)
             const w: PlanWeek | undefined = wn ? weekByNumber.get(wn) : undefined
             const ds = sessions.filter((s) => s.date === d)
             const tint = w ? `color-mix(in srgb, ${phaseColor(w.phase)} ${w.isRecovery ? 6 : 14}%, transparent)` : undefined
@@ -249,13 +252,15 @@ function MonthView({ planStart, today, onOpen }: { planStart: ISODate; today: IS
 }
 
 function PhaseLegend() {
-  const phases: Phase[] = ['base', 'build1', 'build2', 'specific', 'taper', 'race']
+  const { profile } = usePlanContext()
+  const weeks = useLiveQuery(() => db.planWeeks.toArray()) ?? []
+  const phases = [...new Set(weeks.sort((x, y) => x.weekNumber - y.weekNumber).map((w) => w.phase))]
   return (
     <div className="row wrap" style={{ gap: 10, padding: '0 4px' }}>
       {phases.map((p) => (
         <span key={p} className="row t-caption muted" style={{ gap: 4 }}>
           <span className="sport-dot" style={{ background: phaseColor(p) }} />
-          {PHASE_LABEL[p]}
+          {phaseName(profile, p)}
         </span>
       ))}
       <span className="t-caption muted">· más claro = descarga</span>
@@ -265,32 +270,48 @@ function PhaseLegend() {
 
 // ---------- Fases e hitos ----------
 
-const PHASE_WEEKS: [Phase, number, number, string][] = [
-  ['base', 1, 12, 'Hábito, técnica de natación, trote/caminata, fuerza básica, bici suave.'],
-  ['build1', 13, 24, 'Carrera continua, bici más larga, 1.500 m de nado, primer tempo suave.'],
-  ['build2', 25, 36, 'Sprint/10K de prueba, bici 3 h, carrera 12 km, aguas abiertas, bricks.'],
-  ['specific', 37, 46, 'Bici larga 3-4 h, carrera larga 16-18 km, bricks, nutrición y ritmo 70.3.'],
-  ['taper', 47, 50, 'Menos volumen, mantener toques de ritmo.'],
-  ['race', 51, 51, 'Activación, logística, descanso. ¡A por ello!'],
-]
+const FOCUS: Record<GoalType, Partial<Record<Phase, string>>> = {
+  triathlon: {
+    base: 'Hábito, técnica de natación, trote/caminata, fuerza básica, bici suave.',
+    build1: 'Carrera continua, bici más larga, 1.500 m de nado, primer tempo suave.',
+    build2: 'Sprint/10K de prueba, bici 3 h, carrera 12 km, aguas abiertas, bricks.',
+    specific: 'Bici larga 3-4 h, carrera larga 16-18 km, bricks, nutrición y ritmo 70.3.',
+    taper: 'Menos volumen, mantener toques de ritmo.',
+    race: 'Activación, logística, descanso. ¡A por ello!',
+  },
+  running: { base: 'Rodajes suaves y aceleraciones. Crear la base.', build1: 'Tempo y tirada larga creciente.', build2: 'Series a ritmo de carrera.', specific: 'Pico de volumen y ritmo.', taper: 'Menos volumen, mantener el ritmo.', race: 'Día de carrera.' },
+  hyrox: { base: 'Base aeróbica y técnica de las estaciones.', build1: 'Fuerza útil y carrera con estaciones.', build2: 'Más rondas de carrera con las piernas cargadas.', specific: 'Simulacros de competición.', taper: 'Menos volumen, frescura.', race: 'Competición.' },
+  strength: { base: 'Aprender la técnica y crear el hábito.', build1: 'Más series y algo más de carga.', build2: 'Más intensidad: menos repeticiones en reserva.' },
+  weight_loss: { base: 'Hábito: fuerza básica y cardio suave.', build1: 'Más cardio y fuerza en circuito.', build2: 'Intervalos y consolidación del hábito.' },
+}
 
 function PhasesView({ planStart, currentWeek }: { planStart: ISODate; currentWeek: number | null }) {
+  const { profile, goal } = usePlanContext()
   const cw = currentWeek ?? 0
+  const weeks = useLiveQuery(() => db.planWeeks.orderBy('weekNumber').toArray()) ?? []
+  // Tramos consecutivos de la misma fase
+  const ranges: { p: Phase; a: number; b: number }[] = []
+  for (const w of weeks) {
+    const last = ranges[ranges.length - 1]
+    if (last && last.p === w.phase && last.b === w.weekNumber - 1) last.b = w.weekNumber
+    else ranges.push({ p: w.phase, a: w.weekNumber, b: w.weekNumber })
+  }
+  const tri = goal.type === 'triathlon'
   return (
     <div className="stack-lg">
       <section className="stack">
-        {PHASE_WEEKS.map(([p, a, b, focus]) => {
+        {ranges.map(({ p, a, b }) => {
           const active = cw >= a && cw <= b
           const progress = cw > b ? 1 : cw < a ? 0 : (cw - a + 1) / (b - a + 1)
           return (
-            <div key={p} className="card stack" style={{ gap: 8, outline: active ? `2px solid ${phaseColor(p)}` : undefined }}>
+            <div key={`${p}-${a}`} className="card stack" style={{ gap: 8, outline: active ? `2px solid ${phaseColor(p)}` : undefined }}>
               <div className="row-between">
-                <div className="t-headline" style={{ color: phaseColor(p) }}>{PHASE_LABEL[p]}</div>
+                <div className="t-headline" style={{ color: phaseColor(p) }}>{phaseName(profile, p)}</div>
                 <div className="t-foot muted num">
                   S{a}{b !== a && `–S${b}`} · {formatDayShort(weekStart(planStart, a))} – {formatDayShort(addDays(weekStart(planStart, b), 6))}
                 </div>
               </div>
-              <div className="t-sub muted">{focus}</div>
+              {FOCUS[goal.type][p] && <div className="t-sub muted">{FOCUS[goal.type][p]}</div>}
               <div className="progress-track">
                 <div className="progress-fill" style={{ width: `${progress * 100}%`, background: phaseColor(p) }} />
               </div>
@@ -298,7 +319,14 @@ function PhasesView({ planStart, currentWeek }: { planStart: ISODate; currentWee
           )
         })}
       </section>
+      {tri && <TriExtras planStart={planStart} />}
+    </div>
+  )
+}
 
+function TriExtras({ planStart }: { planStart: ISODate }) {
+  return (
+    <>
       <section>
         <div className="group-title t-section">Hitos</div>
         <div className="group">
@@ -318,7 +346,7 @@ function PhasesView({ planStart, currentWeek }: { planStart: ISODate; currentWee
             </div>
           ))}
         </div>
-        <div className="group-foot t-foot muted">El estado de cada hito (adelantado / en camino / retrasado) se calculará con reglas en la Fase D.</div>
+        <div className="group-foot t-foot muted">El estado de cada hito (adelantado, en camino o retrasado) lo tienes en Progreso.</div>
       </section>
 
       <section>
@@ -349,7 +377,7 @@ function PhasesView({ planStart, currentWeek }: { planStart: ISODate; currentWee
         </div>
         <div className="group-foot t-foot muted">Busca fechas reales en Andalucía o Valencia para estas ventanas. Opcional: aquatlón o duatlón en verano si no hace demasiado calor.</div>
       </section>
-    </div>
+    </>
   )
 }
 

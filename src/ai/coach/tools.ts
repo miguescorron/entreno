@@ -4,12 +4,13 @@ import { db, type CoachAction, type MealLog, type PlanSession, type Profile } fr
 import { addMeals } from '../../db/food'
 import { currentAlerts, getAlarm, newAlerts, raiseAlarm } from '../../db/guardrails'
 import { getAdjustment, targetsFor } from '../../db/nutrition'
-import { logSkip, logWorkout, planStartFor } from '../../db/plan'
+import { logSkip, logWorkout, phaseName, phaseOf, planStartFor, weekOf } from '../../db/plan'
 import { createProposal, ProposalError } from '../../db/proposals'
-import { addDays, diffDays, formatDate, mondayOf, weekNumberFor, weekStart, type ISODate } from '../../domain/dates'
+import { addDays, diffDays, formatDate, mondayOf, weekStart, type ISODate } from '../../domain/dates'
+import { goalOf } from '../../domain/goals'
 import { MILESTONES } from '../../domain/milestones'
-import { fmtMin, phaseForWeek, weekLoadMin } from '../../domain/plan/generator'
-import { PHASE_LABEL, SPORT_LABEL } from '../../domain/types'
+import { fmtMin, weekLoadMin } from '../../domain/plan/generator'
+import { SPORT_LABEL } from '../../domain/types'
 
 // Herramientas que la app expone al coach (spec §8.3). Todo lo que guarda
 // queda como tarjeta en el chat, con opción de deshacer.
@@ -272,8 +273,9 @@ export function makeTools(ctx: ToolContext) {
     description: 'Hitos del plan (H0-H6 y carrera) con su semana, fecha y criterios, y los resultados de las pruebas de control registradas.',
     inputSchema: z.object({}),
     run: async () => {
+      if (goalOf(ctx.profile).type !== 'triathlon') return json({ nota: 'Los hitos con fecha son del plan de triatlón. Para este objetivo, valora el progreso con get_progress (adherencia, peso, cargas).' })
       const planStart = planStartFor(ctx.profile)
-      const week = weekNumberFor(planStart, ctx.today)
+      const week = weekOf(ctx.profile, ctx.today)
       const tests = await db.testResults.toArray()
       return json({
         semana_actual: week,
@@ -320,7 +322,7 @@ export async function runTool(tools: CoachTools, name: string, input: unknown): 
 export async function progressSummary(ctx: Pick<ToolContext, 'profile' | 'today'>, weeks: number) {
   const { profile, today } = ctx
   const planStart = planStartFor(profile)
-  const current = weekNumberFor(planStart, today) ?? 1
+  const current = weekOf(profile, today) ?? 1
   const out = []
   for (let w = current; w > Math.max(0, current - weeks); w--) {
     const start = weekStart(planStart, w)
@@ -333,7 +335,7 @@ export async function progressSummary(ctx: Pick<ToolContext, 'profile' | 'today'
     const doneMin = logs.reduce((a, l) => a + l.durationMin, 0)
     out.push({
       semana: w,
-      fase: PHASE_LABEL[phaseForWeek(w)],
+      fase: phaseName(profile, phaseOf(profile, w)),
       sesiones_hasta_hoy: req.length,
       hechas: req.filter((s) => s.status === 'done').length,
       no_hechas: req.filter((s) => s.status === 'skipped').length,

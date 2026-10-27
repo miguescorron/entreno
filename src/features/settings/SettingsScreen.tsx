@@ -2,7 +2,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useRef, useState } from 'react'
 import { db, getSetting, setSetting, type Profile } from '../../db/db'
 import { downloadBackup, importData, wipeAll } from '../../db/backup'
-import { currentWeekNumber, regeneratePlan } from '../../db/plan'
+import { currentWeekNumber, planWeeksFor, regeneratePlan } from '../../db/plan'
+import { EQUIPMENT_LABEL, goalOf, goalSummary, isEventGoal, LEVEL_LABEL } from '../../domain/goals'
 import { ageOn, formatDate, todayISO } from '../../domain/dates'
 import { Button, Pressable } from '../../ui/Button'
 import { Group, Segmented } from '../../ui/Controls'
@@ -13,7 +14,7 @@ import { useToast } from '../../ui/Toast'
 import { aiErrorMessage, testConnection } from '../../ai/client'
 import { getTheme, setTheme, type ThemePref } from '../../lib/theme'
 import { useCurrentProfile } from '../hooks'
-import { ProfileSection, SECTIONS, validateSection, type ProfileDraft, type SectionKey } from '../profile/ProfileForm'
+import { planStartMonday, ProfileSection, SECTIONS, validateSection, type ProfileDraft, type SectionKey } from '../profile/ProfileForm'
 
 export const MODELS = [
   { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5' },
@@ -26,6 +27,7 @@ export function SettingsScreen() {
   const toast = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [theme, setThemeState] = useState<ThemePref>(getTheme)
+  const goal = goalOf(profile)
   const onImport = async (file?: File) => {
     if (!file) return
     try {
@@ -43,15 +45,24 @@ export function SettingsScreen() {
       <div className="stack-lg">
         <Group title="Perfil">
           <Cell label="Sobre ti" value={[profile.name, age && `${age} años`, `${profile.heightCm} cm`].filter(Boolean).join(' · ')} onClick={() => setSection('basics')} />
-          <Cell label="Natación" value={{ no: 'Sin crol', basic: 'Crol básico', good: 'Crol bien' }[profile.swimCrawl]} onClick={() => setSection('swim')} />
-          <Cell label="Material" onClick={() => setSection('gear')} />
-          <Cell label="Tu tiempo" value={`${String(profile.weeklyHoursAvailable).replace('.', ',')} h/sem`} onClick={() => setSection('availability')} />
+          {goal.type === 'triathlon' && <Cell label="Natación" value={{ no: 'Sin crol', basic: 'Crol básico', good: 'Crol bien' }[profile.swimCrawl]} onClick={() => setSection('swim')} />}
+          {goal.type === 'triathlon' && <Cell label="Bici y material" onClick={() => setSection('gear')} />}
+          <Cell label="Tu tiempo" value={`${profile.availableDays.length} días · ${profile.sessionMinutes ?? 45} min`} onClick={() => setSection('availability')} />
           <Cell label="Salud" value={profile.medicalCheckDone ? 'Chequeo hecho' : 'Chequeo pendiente'} onClick={() => setSection('health')} />
           <Cell label="Alimentación" onClick={() => setSection('food')} />
         </Group>
 
-        <Group title="Carrera" foot="Si cambias la fecha, las horas o los días, las sesiones pendientes se recalculan. Las hechas se conservan.">
-          <Cell label={profile.raceName} value={formatDate(profile.raceDate)} onClick={() => setSection('race')} />
+        <Group title="Objetivo" foot="Si cambias el objetivo, el nivel, el material o tu tiempo, las sesiones pendientes se recalculan. Las hechas se conservan.">
+          <Cell label={goalSummary(goal, formatDate)} value={`${LEVEL_LABEL[profile.level ?? 'beginner']} · ${EQUIPMENT_LABEL[profile.equipment ?? 'dumbbells']}`} onClick={() => setSection('goal')} />
+          <Cell
+            label="Regenerar las sesiones pendientes"
+            tint
+            onClick={async () => {
+              if (!window.confirm('Se vuelven a generar las sesiones pendientes desde esta semana, con el detalle de los ejercicios. Lo que ya has hecho se conserva, pero los cambios que hayas hecho a mano en sesiones pendientes se pierden. ¿Seguir?')) return
+              await regeneratePlan(profile, Math.max(1, currentWeekNumber(profile) ?? 1))
+              toast('Plan actualizado')
+            }}
+          />
         </Group>
 
         <Group title="Apariencia">
@@ -121,22 +132,31 @@ function ProfileSheet({ profile, section, onClose }: { profile: Profile; section
   const [busy, setBusy] = useState(false)
   const toast = useToast()
   useEffect(() => {
-    if (section) setDraft(profile)
+    if (section) setDraft({ ...profile, goal: goalOf(profile) })
   }, [section, profile])
 
   const meta = SECTIONS.find((s) => s.key === section)
   const error = section ? validateSection(section, draft) : null
 
   const save = async () => {
-    const raceChanged = draft.raceDate !== profile.raceDate || draft.raceName !== profile.raceName
-    const hoursChanged = draft.weeklyHoursAvailable !== profile.weeklyHoursAvailable || draft.availableDays.join() !== profile.availableDays.join()
-    if ((raceChanged || hoursChanged) && !window.confirm('Se recalcularán las sesiones pendientes del plan (las hechas se conservan). ¿Seguir?')) return
+    const before = goalOf(profile)
+    let goal = draft.goal ?? before
+    const goalChanged = goal.type !== before.type || goal.eventDate !== before.eventDate || goal.distance !== before.distance || goal.focus !== before.focus || goal.division !== before.division
+    const setupChanged =
+      draft.weeklyHoursAvailable !== profile.weeklyHoursAvailable ||
+      draft.availableDays.join() !== profile.availableDays.join() ||
+      draft.level !== profile.level ||
+      draft.equipment !== profile.equipment ||
+      draft.sessionMinutes !== profile.sessionMinutes
+    if ((goalChanged || setupChanged) && !window.confirm('Se recalcularán las sesiones pendientes del plan (las hechas se conservan). ¿Seguir?')) return
     setBusy(true)
-    await db.profile.update(profile.id!, draft)
-    if (raceChanged || hoursChanged) {
-      const next = { ...profile, ...draft }
-      // Fecha nueva: se rehace todo. Horas o días: desde la semana que viene.
-      const from = raceChanged ? 1 : Math.min(51, (currentWeekNumber(next) ?? 0) + 1)
+    // Objetivo nuevo sin fecha fija: el plan arranca este lunes (o el siguiente)
+    if (goalChanged && goal.type !== 'triathlon') goal = { ...goal, startDate: planStartMonday() }
+    const next = { ...profile, ...draft, goal, raceName: isEventGoal(goal) ? goal.eventName ?? '' : profile.raceName, raceDate: isEventGoal(goal) ? goal.eventDate ?? '' : profile.raceDate }
+    await db.profile.update(profile.id!, next)
+    if (goalChanged || setupChanged) {
+      // Objetivo nuevo: se rehace todo. Nivel, material o tiempo: desde la semana que viene.
+      const from = goalChanged ? 1 : Math.min(planWeeksFor(next), (currentWeekNumber(next) ?? 0) + 1)
       await regeneratePlan(next, Math.max(1, from))
       toast('Plan recalculado')
     }

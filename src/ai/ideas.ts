@@ -1,6 +1,7 @@
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { z } from 'zod'
 import type { Profile } from '../db/db'
+import { goalOf, goalSummary } from '../domain/goals'
 import type { DayType } from '../domain/nutrition/targets'
 import { bannedTerms, fitsBudget, mealLabel, ULTRAPROCESSED_TERMS, violates, type Budget, type MealType } from '../domain/nutrition/ideas'
 import { getClient, getMainModel } from './client'
@@ -38,7 +39,7 @@ export interface IdeasRequest {
   realfooding: boolean
 }
 
-const SYSTEM = `Eres cocinero de cocina casera española y mediterránea y nutricionista deportivo. Propones comidas para un triatleta aficionado en España.
+const SYSTEM = `Eres cocinero de cocina casera española y mediterránea y nutricionista deportivo. Propones comidas para una persona que entrena y cuida su alimentación en España.
 Reglas:
 - Solo platos que existen de verdad y que cualquiera reconocería en una casa o en un menú del día en España. Por ejemplo: lentejas estofadas, garbanzos con espinacas, merluza en salsa verde, pollo al ajillo, tortilla de calabacín, ensalada de garbanzos con atún, revuelto de espárragos, salmón a la plancha con patata asada, crema de calabaza, arroz con pollo y verduras, huevos rotos con pimientos. Valen versiones rápidas (legumbre de bote, microondas, sartén).
 - Nada de inventos ni fusiones raras: combina solo ingredientes que se comen juntos de forma clásica. Una proteína principal por plato, salvo combinaciones tradicionales. Pescado con legumbre solo si es una receta tradicional conocida (potaje de vigilia con bacalao); nunca cosas como merluza con lentejas.
@@ -60,6 +61,7 @@ export async function generateIdeas(r: IdeasRequest): Promise<{ ideas: Idea[]; d
   const month = new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(new Date())
   const prompt = [
     `Dame 4 ideas para ${mealLabel(r.mealType)}.`,
+    `Su objetivo: ${goalSummary(goalOf(r.profile), (d) => d)}${goalOf(r.profile).type === 'strength' ? ' (prioriza bien la proteína)' : goalOf(r.profile).type === 'weight_loss' ? ' (platos saciantes, con mucha verdura y proteína)' : ''}.`,
     `Presupuesto: unos ${r.budget.kcal} kcal (±10 %), con al menos ${r.budget.protein} g de proteína; hidratos ≈ ${r.budget.carbs} g y grasa ≈ ${r.budget.fat} g.`,
     r.quick ? 'Tienen que ser rápidas: 15 minutos o menos.' : 'Máximo 30 minutos.',
     `Hoy es ${r.dayType === 'long' ? 'día de sesión larga (más hidratos)' : r.dayType === 'rest' ? 'día de descanso' : r.dayType === 'race' ? 'día de carrera' : 'día de entreno'}. Estamos en ${month}: usa producto de temporada.`,

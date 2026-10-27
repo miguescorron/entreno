@@ -1,9 +1,31 @@
-import { planStartFromRace, todayISO, weekdayIndex, weekNumberFor, type ISODate } from '../domain/dates'
-import { generatePlan } from '../domain/plan/generator'
+import { todayISO, weekNumberFor, type ISODate } from '../domain/dates'
+import { goalOf, phaseFor, phaseLabel, planSpec } from '../domain/goals'
+import { generateForGoal } from '../domain/plan/goalPlans'
+import { phaseForWeek } from '../domain/plan/generator'
+import type { Phase } from '../domain/types'
 import { db, type PlanSession, type Profile, type SkipReason, type WorkoutLog } from './db'
 
-export function planStartFor(profile: Pick<Profile, 'raceDate'>): ISODate {
-  return planStartFromRace(profile.raceDate)
+export function planStartFor(profile: Profile): ISODate {
+  return planSpec(profile).start
+}
+
+export function planWeeksFor(profile: Profile): number {
+  return planSpec(profile).weeks
+}
+
+/** Semana del plan (1..N) para una fecha, o null si cae fuera. */
+export function weekOf(profile: Profile, d: ISODate): number | null {
+  const s = planSpec(profile)
+  return weekNumberFor(s.start, d, s.weeks)
+}
+
+export function phaseOf(profile: Profile, week: number): Phase {
+  const s = planSpec(profile)
+  return s.goal.type === 'triathlon' ? phaseForWeek(week) : phaseFor(s.goal, week, s.weeks)
+}
+
+export function phaseName(profile: Profile, phase: Phase): string {
+  return phaseLabel(goalOf(profile), phase)
 }
 
 /**
@@ -11,14 +33,7 @@ export function planStartFor(profile: Pick<Profile, 'raceDate'>): ISODate {
  * marcadas como no hechas; sustituye las pendientes.
  */
 export async function regeneratePlan(profile: Profile, fromWeek = 1) {
-  const planStart = planStartFor(profile)
-  const weeks = generatePlan({
-    planStart,
-    maxWeeklyHours: profile.weeklyHoursAvailable,
-    raceWeekday: weekdayIndex(profile.raceDate),
-    raceName: profile.raceName,
-    availableDays: profile.availableDays,
-  }).filter((w) => w.weekNumber >= fromWeek)
+  const weeks = generateForGoal(profile).filter((w) => w.weekNumber >= fromWeek)
 
   await db.transaction('rw', db.planWeeks, db.planSessions, async () => {
     await db.planWeeks.where('weekNumber').aboveOrEqual(fromWeek).delete()
@@ -28,7 +43,7 @@ export async function regeneratePlan(profile: Profile, fromWeek = 1) {
 
     // Si cambió la fecha de la carrera, la numeración de semanas se desplaza
     for (const s of kept) {
-      const wn = weekNumberFor(planStart, s.date)
+      const wn = weekOf(profile, s.date)
       if (wn && wn !== s.weekNumber) await db.planSessions.update(s.id!, { weekNumber: wn })
     }
 
@@ -45,7 +60,7 @@ export async function regeneratePlan(profile: Profile, fromWeek = 1) {
 }
 
 export async function moveSession(session: PlanSession, toDate: ISODate, planStart: ISODate) {
-  const weekNumber = weekNumberFor(planStart, toDate) ?? session.weekNumber
+  const weekNumber = weekNumberFor(planStart, toDate, 52) ?? session.weekNumber
   await db.planSessions.update(session.id!, {
     date: toDate,
     weekNumber,
@@ -81,6 +96,6 @@ export async function resetSession(session: PlanSession) {
   })
 }
 
-export function currentWeekNumber(profile: Pick<Profile, 'raceDate'>, today = todayISO()): number | null {
-  return weekNumberFor(planStartFor(profile), today)
+export function currentWeekNumber(profile: Profile, today = todayISO()): number | null {
+  return weekOf(profile, today)
 }

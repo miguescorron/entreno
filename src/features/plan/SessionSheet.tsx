@@ -8,6 +8,7 @@ import { Chips, Field, NumberInput } from '../../ui/Controls'
 import { Sheet } from '../../ui/Sheet'
 import { formatDistance, SportBadge } from '../../ui/sport'
 import { useToast } from '../../ui/Toast'
+import { SessionBlocks } from './SessionBlocks'
 
 interface Props {
   open: boolean
@@ -92,7 +93,9 @@ export function SessionSheet({ open, onClose, session, planStart, onLog, onSkip 
           <p className="t-body" style={{ margin: 0 }}>{session.description}</p>
         )}
 
-        {session.structure?.kind === 'segments' && (
+        {session.blocks && !editing && <SessionBlocks blocks={session.blocks} />}
+
+        {!session.blocks && session.structure?.kind === 'segments' && (
           <div className="group">
             {session.structure.segments.map((g, i) => (
               <div className="cell" key={i}>

@@ -5,7 +5,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { db, getSetting, type PlanSession, type Profile } from '../../db/db'
 import { diffDays, formatDate, formatDayLong, type ISODate } from '../../domain/dates'
 import { fmtMin } from '../../domain/plan/generator'
-import { PHASE_LABEL } from '../../domain/types'
+import { DEFAULT_BLOCK_WEEKS, goalOf, goalSummary, isEventGoal } from '../../domain/goals'
+import { phaseName, regeneratePlan } from '../../db/plan'
+import { useToast } from '../../ui/Toast'
 import { Button, Pressable } from '../../ui/Button'
 import { Icon } from '../../ui/Icon'
 import { spring } from '../../ui/motion'
@@ -17,11 +19,12 @@ import { WeeklyReviewCard } from '../progress/WeeklyReviewCard'
 import { AddFoodSheet } from '../food/AddFoodSheet'
 import { MacroSummary } from '../food/MacroSummary'
 import { useDayNutrition, useNutritionBootstrap } from '../food/useNutrition'
+import { SessionBlocks } from '../plan/SessionBlocks'
 import { usePlanContext } from '../hooks'
 import { useSheets } from '../logs/useSheets'
 
 export function TodayScreen() {
-  const { profile, today, planStart, currentWeek } = usePlanContext()
+  const { profile, today, planStart, currentWeek, goal, planWeeks } = usePlanContext()
   const { open, sheets } = useSheets(planStart, today)
   const navigate = useNavigate()
   const [addingFood, setAddingFood] = useState(false)
@@ -41,7 +44,9 @@ export function TodayScreen() {
   const checkin = useLiveQuery(() => db.checkins.where('date').equals(today).first(), [today])
   const lastWeight = useLiveQuery(() => db.bodyLogs.orderBy('date').last())
 
-  const daysToRace = diffDays(profile.raceDate, today)
+  const eventDate = isEventGoal(goal) ? goal.eventDate : undefined
+  const daysToRace = eventDate ? diffDays(eventDate, today) : null
+  const planEnded = !currentWeek && today > planStart
   const required = week?.sessions.filter((s) => !s.optional && s.sport !== 'race') ?? []
   const done = required.filter((s) => s.status === 'done').length
 
@@ -60,6 +65,7 @@ export function TodayScreen() {
         <AlarmBanner />
         {!profile.medicalCheckDone && <MedicalBanner profile={profile} />}
         <AlertsCard />
+        {planEnded && !isEventGoal(goal) && <NextBlockCard />}
         <WeeklyReviewCard compact />
 
         {week && (
@@ -67,12 +73,12 @@ export function TodayScreen() {
             <div className="row-between">
               <div>
                 <div className="t-headline num">
-                  {currentWeek ? `Semana ${currentWeek}/51` : `Empieza el ${formatDate(planStart)}`}
-                  <span style={{ color: phaseColor(week.info.phase) }}> · {PHASE_LABEL[week.info.phase]}</span>
+                  {currentWeek ? `Semana ${currentWeek}/${planWeeks}` : planEnded ? 'Bloque terminado' : `Empieza el ${formatDate(planStart)}`}
+                  {currentWeek && <span style={{ color: phaseColor(week.info.phase) }}> · {phaseName(profile, week.info.phase)}</span>}
                 </div>
                 <div className="t-sub muted num">
                   Sesiones {done}/{required.length}
-                  {week.info.isRecovery && ' · Descarga'} · {daysToRace} días para la carrera
+                  {week.info.isRecovery && ' · Descarga'}{daysToRace != null ? ` · ${daysToRace} días para la prueba` : ` · ${goalSummary(goal, formatDate)}`}
                 </div>
               </div>
               <Icon name="chevronRight" size={18} className="chevron" />
@@ -170,6 +176,7 @@ function SessionCard({ session: s, onDone, onChange, onSkip }: { session: PlanSe
         {s.status === 'done' && <Icon name="check" size={26} strokeWidth={2.4} className="status-done" />}
       </Pressable>
       <p className="t-callout" style={{ margin: 0 }}>{s.description}</p>
+      {s.blocks && s.status === 'planned' && <SessionBlocks blocks={s.blocks} compact />}
       <div className="row wrap" style={{ gap: 6 }}>
         {s.test && <span className="pill">Prueba de control</span>}
         {s.key && !s.test && <span className="pill">Sesión clave</span>}
@@ -223,6 +230,34 @@ function QuickAction({ icon, label, onClick }: { icon: 'plus' | 'food' | 'coach'
   )
 }
 
+/** Al terminar un bloque sin fecha (fuerza, peso), se genera el siguiente con más nivel. */
+function NextBlockCard() {
+  const { profile, planWeeks } = usePlanContext()
+  const toast = useToast()
+  return (
+    <div className="card stack" style={{ gap: 10 }}>
+      <div className="t-headline">¡Has terminado tu bloque de {planWeeks} semanas!</div>
+      <div className="t-sub muted">Genera el siguiente: sigue el mismo objetivo, rota ejercicios y sube un poco la exigencia.</div>
+      <Button
+        variant="filled"
+        onClick={async () => {
+          const goal = goalOf(profile)
+          const next = {
+            ...profile,
+            level: profile.level === 'beginner' ? ('intermediate' as const) : profile.level,
+            goal: { ...goal, weeks: (goal.weeks ?? DEFAULT_BLOCK_WEEKS) + DEFAULT_BLOCK_WEEKS },
+          }
+          await db.profile.update(profile.id!, next)
+          await regeneratePlan(next, planWeeks + 1)
+          toast('Nuevo bloque listo')
+        }}
+      >
+        Generar el siguiente bloque
+      </Button>
+    </div>
+  )
+}
+
 function DemoNotice() {
   const demo = useLiveQuery(() => getSetting('demo', false))
   if (!demo) return null
@@ -242,7 +277,7 @@ function MedicalBanner({ profile }: { profile: Profile }) {
       <span style={{ fontSize: 20 }} aria-hidden>⚕️</span>
       <div className="grow stack" style={{ gap: 8 }}>
         <span className="t-sub">
-          <b>Hito H0:</b> hazte un chequeo médico con prueba de esfuerzo antes de empezar a entrenar en serio.
+          <b>Antes de empezar:</b> si partes de cero, tienes más de 35 años o vas a preparar una prueba, hazte un chequeo médico (mejor con prueba de esfuerzo).
         </span>
         <Button variant="small tinted" style={{ alignSelf: 'flex-start' }} onClick={() => db.profile.update(profile.id!, { medicalCheckDone: true })}>
           Ya lo he hecho

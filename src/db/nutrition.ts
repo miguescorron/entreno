@@ -1,5 +1,5 @@
-import { addDays, ageOn, weekNumberFor, weekStart, type ISODate } from '../domain/dates'
-import { phaseForWeek } from '../domain/plan/generator'
+import { addDays, ageOn, weekStart, type ISODate } from '../domain/dates'
+import { goalOf } from '../domain/goals'
 import {
   ADJUSTMENT_LIMITS,
   computeTargets,
@@ -9,7 +9,7 @@ import {
   type Targets,
 } from '../domain/nutrition/targets'
 import { db, getSetting, setSetting, type Profile } from './db'
-import { planStartFor } from './plan'
+import { phaseOf, planStartFor, planWeeksFor, weekOf } from './plan'
 
 export interface AdjustmentState {
   kcal: number
@@ -47,8 +47,7 @@ export async function trainingFor(date: ISODate): Promise<TrainingBlock[]> {
 }
 
 export async function targetsFor(profile: Profile, date: ISODate): Promise<Targets> {
-  const planStart = planStartFor(profile)
-  const week = weekNumberFor(planStart, date) ?? 1
+  const week = weekOf(profile, date) ?? 1
   const [weightKg, training, adj] = await Promise.all([currentWeight(profile, date), trainingFor(date), getAdjustment()])
   return computeTargets({
     sex: profile.sex,
@@ -56,7 +55,9 @@ export async function targetsFor(profile: Profile, date: ISODate): Promise<Targe
     heightCm: profile.heightCm,
     weightKg,
     goalWeightKg: profile.goalWeightKg,
-    phase: phaseForWeek(week),
+    phase: phaseOf(profile, week),
+    goalType: goalOf(profile).type,
+    planProgress: week / planWeeksFor(profile),
     training,
     adjustmentKcal: adj.kcal,
   })
@@ -68,7 +69,7 @@ export async function targetsFor(profile: Profile, date: ISODate): Promise<Targe
  */
 export async function runWeeklyAdjustment(profile: Profile, today: ISODate): Promise<AdjustmentState | null> {
   const planStart = planStartFor(profile)
-  const week = weekNumberFor(planStart, today)
+  const week = weekOf(profile, today)
   if (!week || week < 3) return null
   const state = await getAdjustment()
   if (state.week >= week) return null

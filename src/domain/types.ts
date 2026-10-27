@@ -1,6 +1,6 @@
 import type { ISODate } from './dates'
 
-export type Sport = 'swim' | 'bike' | 'run' | 'walk' | 'strength' | 'brick' | 'race' | 'other'
+export type Sport = 'swim' | 'bike' | 'run' | 'walk' | 'strength' | 'brick' | 'hyrox' | 'cardio' | 'race' | 'other'
 export type Phase = 'base' | 'build1' | 'build2' | 'specific' | 'taper' | 'race'
 export type SessionStatus = 'planned' | 'done' | 'skipped' | 'moved'
 export type TestType = 'run20' | 'swim400' | 'bike30' | 'run_continuous_min' | 'swim_continuous_m' | 'open_water_m'
@@ -18,6 +18,22 @@ export type SessionStructure =
   | { kind: 'intervals'; reps: number; onMin: number; offMin: number; warmupMin: number; cooldownMin: number }
   | { kind: 'segments'; segments: { sport: Sport; durationMin: number; note?: string }[] }
 
+/** Un paso de la sesión: un ejercicio de la biblioteca o una indicación libre. */
+export interface WorkoutItem {
+  exerciseId?: string
+  label: string
+  sets?: number
+  /** "10-12", "30 s", "200 m", "8'"... */
+  reps?: string
+  restSec?: number
+  note?: string
+}
+
+export interface WorkoutBlock {
+  name: string
+  items: WorkoutItem[]
+}
+
 export interface SessionDraft {
   date: ISODate
   sport: Sport
@@ -32,6 +48,8 @@ export interface SessionDraft {
   test?: TestType
   /** Sesión clave de la semana (larga, test, ensayo) */
   key?: boolean
+  /** Detalle paso a paso: calentamiento, parte principal, vuelta a la calma */
+  blocks?: WorkoutBlock[]
 }
 
 export interface WeekDraft {
@@ -51,6 +69,8 @@ export const SPORT_LABEL: Record<Sport, string> = {
   walk: 'Caminata',
   strength: 'Fuerza',
   brick: 'Brick',
+  hyrox: 'Hyrox',
+  cardio: 'Cardio',
   race: 'Carrera objetivo',
   other: 'Otro',
 }

@@ -7,7 +7,7 @@ import { addDays, todayISO, weekdayIndex, weekNumberFor, weekStart, type ISODate
 import { fmtMin } from '../domain/plan/generator'
 import { db, getSetting, setSetting, type Profile, type ProposalKind } from './db'
 import { currentAlerts } from './guardrails'
-import { planStartFor } from './plan'
+import { planStartFor, planWeeksFor } from './plan'
 import { milestoneStatus, weeklyStats, weightSeries } from './progress'
 import { createProposal } from './proposals'
 
@@ -45,9 +45,9 @@ export interface ReviewSummary {
 }
 
 /** Semana a revisar: la actual a partir del domingo a las 18:00; si no, la anterior. */
-export function reviewWeekFor(planStart: ISODate, today: ISODate, hour: number): number | null {
-  const week = weekNumberFor(planStart, today)
-  if (!week) return today > planStart ? 51 : null
+export function reviewWeekFor(planStart: ISODate, today: ISODate, hour: number, weeks = 51): number | null {
+  const week = weekNumberFor(planStart, today, weeks)
+  if (!week) return today > planStart ? weeks : null
   if (weekdayIndex(today) === 6 && hour >= 18) return week
   return week > 1 ? week - 1 : null
 }
@@ -166,7 +166,7 @@ export function parseReview(text: string): ReviewSummary {
 
 /** Genera la revisión pendiente automáticamente una vez (si hay clave). */
 export async function maybeAutoReview(profile: Profile, today: ISODate, hour: number) {
-  const week = reviewWeekFor(planStartFor(profile), today, hour)
+  const week = reviewWeekFor(planStartFor(profile), today, hour, planWeeksFor(profile))
   if (!week) return
   if (await db.weeklyReviews.where('weekNumber').equals(week).count()) return
   if (!(await getSetting<string>('anthropicApiKey', ''))) return

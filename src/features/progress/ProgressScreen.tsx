@@ -39,7 +39,7 @@ const kg = (n: number) => `${n.toLocaleString('es-ES', { maximumFractionDigits: 
 const hours = (min: number) => `${(min / 60).toLocaleString('es-ES', { maximumFractionDigits: 1 })} h`
 
 export function ProgressScreen() {
-  const { profile, today, planStart, currentWeek } = usePlanContext()
+  const { profile, today, planStart, currentWeek, planWeeks } = usePlanContext()
   const navigate = useNavigate()
   const [range, setRange] = useState<Range>('8')
   const [volume, setVolume] = useState<'h' | 'km'>('h')
@@ -62,7 +62,7 @@ export function ProgressScreen() {
   const askCoach = (text: string) => navigate('/coach', { state: { draft: text } })
 
   return (
-    <Screen title="Progreso" eyebrow={currentWeek ? `Semana ${currentWeek}/51` : `Empieza el ${formatDate(planStart)}`}>
+    <Screen title="Progreso" eyebrow={currentWeek ? `Semana ${currentWeek}/${planWeeks}` : `Empieza el ${formatDate(planStart)}`}>
       <div className="stack-lg">
         <Segmented value={range} onChange={setRange} options={[{ value: '8', label: '8 semanas' }, { value: '16', label: '16 semanas' }, { value: 'all', label: 'Todo' }]} />
 

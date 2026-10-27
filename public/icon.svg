@@ -6,9 +6,5 @@
     </linearGradient>
   </defs>
   <rect width="512" height="512" fill="url(#g)"/>
-  <g fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M96 352c24 0 24-16 48-16s24 16 48 16 24-16 48-16 24 16 48 16 24-16 48-16 24 16 48 16 24-16 48-16"/>
-    <path d="M96 408c24 0 24-16 48-16s24 16 48 16 24-16 48-16 24 16 48 16 24-16 48-16 24 16 48 16 24-16 48-16" opacity=".55"/>
-  </g>
-  <text x="256" y="268" text-anchor="middle" font-family="-apple-system, Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="800" font-size="150" fill="#fff" letter-spacing="-6">70.3</text>
+  <path d="M84 276h86l42-104 70 196 44-120h102" fill="none" stroke="#fff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

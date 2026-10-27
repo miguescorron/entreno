@@ -2,11 +2,9 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { db, getSetting, setSetting, type ChatMessage, type CoachAction, type Profile } from '../../db/db'
 import { getAlarm, pendingAlerts, raiseAlarm } from '../../db/guardrails'
 import { targetsFor } from '../../db/nutrition'
-import { planStartFor } from '../../db/plan'
-import { formatDate, formatDayLong, weekNumberFor, type ISODate } from '../../domain/dates'
+import { phaseName, phaseOf, planStartFor, planWeeksFor, weekOf } from '../../db/plan'
+import { formatDate, formatDayLong, type ISODate } from '../../domain/dates'
 import { detectAlarmSignals } from '../../domain/guardrails/ambition'
-import { phaseForWeek } from '../../domain/plan/generator'
-import { PHASE_LABEL } from '../../domain/types'
 import { getClient, getMainModel, MODEL_FAST } from '../client'
 import { buildSystemPrompt, SUMMARY_PROMPT } from './prompt'
 import { makeTools, runTool, type ToolContext } from './tools'
@@ -101,7 +99,7 @@ async function newSession(profile: Profile, today: ISODate, summary: string): Pr
 /** Bloque de contexto que la app añade a cada mensaje (fecha, sesiones, comida, alertas). */
 export async function contextBlock(profile: Profile, today: ISODate): Promise<string> {
   const planStart = planStartFor(profile)
-  const week = weekNumberFor(planStart, today)
+  const week = weekOf(profile, today)
   const [sessions, meals, targets, alerts, alarm] = await Promise.all([
     db.planSessions.where('date').equals(today).toArray(),
     db.mealLogs.where('date').equals(today).toArray(),
@@ -113,7 +111,7 @@ export async function contextBlock(profile: Profile, today: ISODate): Promise<st
   const protein = Math.round(meals.reduce((a, m) => a + m.protein, 0))
   const lines = [
     '[Datos de la app — no lo ha escrito el atleta]',
-    `Hoy: ${formatDayLong(today)} (${today}).${week ? ` Semana ${week}/51, fase ${PHASE_LABEL[phaseForWeek(week)]}.` : ` El plan empieza el ${formatDate(planStart)}.`}`,
+    `Hoy: ${formatDayLong(today)} (${today}).${week ? ` Semana ${week}/${planWeeksFor(profile)}, fase ${phaseName(profile, phaseOf(profile, week))}.` : ` El plan empieza el ${formatDate(planStart)}.`}`,
     sessions.length
       ? `Sesiones de hoy: ${sessions.map((s) => `[id ${s.id}] ${s.title} ${s.durationMin}' (${s.status === 'planned' ? 'pendiente' : s.status === 'done' ? 'hecha' : s.status === 'skipped' ? 'no hecha' : s.status}${s.optional ? ', opcional' : ''})`).join('; ')}.`
       : 'Hoy no hay sesiones: descanso.',

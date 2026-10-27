@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useState } from 'react'
 import { aiErrorMessage } from '../../ai/client'
 import { db, getSetting } from '../../db/db'
-import { planStartFor } from '../../db/plan'
+import { planStartFor, planWeeksFor } from '../../db/plan'
 import { generateReview, maybeAutoReview, parseReview, reviewWeekFor } from '../../db/review'
 import { Button } from '../../ui/Button'
 import { ProposalCard } from '../coach/ActionCard'
@@ -13,7 +13,7 @@ import type { Light } from '../../domain/progress/rules'
 /** Revisión semanal: se genera sola el domingo por la noche o al abrir la app después. */
 export function WeeklyReviewCard({ compact }: { compact?: boolean }) {
   const { profile, today } = usePlanContext()
-  const week = reviewWeekFor(planStartFor(profile), today, new Date().getHours())
+  const week = reviewWeekFor(planStartFor(profile), today, new Date().getHours(), planWeeksFor(profile))
   const review = useLiveQuery(() => (week ? db.weeklyReviews.where('weekNumber').equals(week).last() : undefined), [week])
   const hasKey = useLiveQuery(async () => !!(await getSetting<string>('anthropicApiKey', '')))
   const [busy, setBusy] = useState(false)

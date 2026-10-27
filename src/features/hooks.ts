@@ -1,8 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { createContext, useContext, useEffect, useState } from 'react'
 import { db, type Profile } from '../db/db'
-import { planStartFor } from '../db/plan'
-import { todayISO, weekNumberFor } from '../domain/dates'
+import { planStartFor, planWeeksFor, weekOf } from '../db/plan'
+import { goalOf } from '../domain/goals'
+import { todayISO } from '../domain/dates'
 
 /** undefined = cargando, null = sin perfil (onboarding) */
 export function useProfile() {
@@ -37,5 +38,5 @@ export function usePlanContext() {
   const profile = useCurrentProfile()
   const today = useToday()
   const planStart = planStartFor(profile)
-  return { profile, today, planStart, currentWeek: weekNumberFor(planStart, today) }
+  return { profile, today, planStart, planWeeks: planWeeksFor(profile), goal: goalOf(profile), currentWeek: weekOf(profile, today) }
 }

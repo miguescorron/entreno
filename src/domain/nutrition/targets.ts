@@ -1,3 +1,4 @@
+import type { GoalType } from '../goals'
 import type { Phase, SessionStructure, Sport } from '../types'
 
 // Objetivos de calorías y macros (spec §10). Todo puro y testeado.
@@ -26,6 +27,8 @@ const MET: Record<Sport, number> = {
   walk: 4,
   strength: 4.5,
   brick: 7,
+  hyrox: 8,
+  cardio: 5,
   race: 8,
   other: 4,
 }
@@ -66,6 +69,30 @@ export function phaseDeficit(phase: Phase, kg: number, goalKg: number): number {
   }
 }
 
+/**
+ * Déficit (positivo) o superávit (negativo) según el objetivo:
+ * - Perder peso: déficit moderado hasta el peso objetivo.
+ * - Fuerza y tono: recomposición; déficit pequeño si sobra peso, superávit ligero si se busca ganar.
+ * - Carrera y Hyrox: déficit en la primera parte, casi nada al acercarse la prueba.
+ * - Triatlón: según la fase (spec §10).
+ */
+export function goalDeficit(goalType: GoalType | undefined, phase: Phase, kg: number, goalKg: number, progress = 0): number {
+  switch (goalType) {
+    case 'weight_loss':
+      return kg > goalKg ? 450 : 0
+    case 'strength':
+      if (kg > goalKg + 1) return 300
+      if (kg < goalKg - 1) return -200
+      return 0
+    case 'running':
+    case 'hyrox':
+      if (phase === 'taper' || phase === 'race' || kg <= goalKg) return 0
+      return progress > 0.75 ? 150 : 400
+    default:
+      return phaseDeficit(phase, kg, goalKg)
+  }
+}
+
 export interface TargetInput {
   sex: Sex
   age: number
@@ -77,6 +104,9 @@ export interface TargetInput {
   training: TrainingBlock[]
   /** Ajuste adaptativo acumulado (kcal) */
   adjustmentKcal?: number
+  goalType?: GoalType
+  /** Avance del plan (0-1), para afinar el déficit al acercarse una prueba */
+  planProgress?: number
 }
 
 export interface Targets {
@@ -101,15 +131,16 @@ export function computeTargets(i: TargetInput): Targets {
   const dayType = dayTypeFor(i.training)
   const notes: string[] = []
 
-  let deficit = phaseDeficit(i.phase, i.weightKg, i.goalWeightKg)
+  let deficit = goalDeficit(i.goalType, i.phase, i.weightKg, i.goalWeightKg, i.planProgress)
   if (dayType === 'long' || dayType === 'race') {
-    if (deficit) notes.push('Día de sesión larga: sin déficit.')
-    deficit = 0
+    if (deficit > 0) notes.push('Día de sesión larga: sin déficit.')
+    deficit = Math.min(0, deficit)
   }
 
   let kcal = tdee - deficit + (i.adjustmentKcal ?? 0)
   // Nunca por encima del gasto si hay déficit pautado, nunca por debajo del basal
   if (deficit > 0) kcal = Math.min(kcal, tdee)
+  if (deficit < 0) notes.push(`Ligero superávit (+${-deficit} kcal) para ganar músculo.`)
   if (kcal < base) {
     kcal = base
     notes.push('Ajustado al metabolismo basal: nunca comas por debajo.')

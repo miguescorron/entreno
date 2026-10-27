@@ -1,7 +1,7 @@
-import { addDays, formatDayLong, weekNumberFor } from '../domain/dates'
+import { addDays, formatDayLong } from '../domain/dates'
 import { fmtMin, weekLoadMin } from '../domain/plan/generator'
 import { db, type PlanProposal, type PlanSession } from './db'
-import { moveSession, planStartFor } from './plan'
+import { moveSession, planStartFor, weekOf } from './plan'
 
 // Propuestas de cambio del plan: el coach las crea, el usuario las acepta o no.
 // Nunca se toca el plan sin su confirmación (spec §4.6 y §8.2 regla 7).
@@ -93,7 +93,7 @@ export async function acceptProposal(id: number) {
         const keep = new Set(target.filter((x) => x.status !== 'planned').map((x) => `${x.date}|${x.sport}`))
         const copies: PlanSession[] = src
           .map(({ id: _id, status: _st, movedFromDate: _m, ...x }) => ({ ...x, date: addDays(x.date, 7), weekNumber: p.week! + 1, status: 'planned' as const }))
-          .filter((x) => !keep.has(`${x.date}|${x.sport}`) && weekNumberFor(planStart, x.date) === p.week! + 1)
+          .filter((x) => !keep.has(`${x.date}|${x.sport}`) && weekOf(profile, x.date) === p.week! + 1)
         await db.planSessions.bulkAdd(copies)
         break
       }

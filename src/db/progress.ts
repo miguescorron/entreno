@@ -1,12 +1,12 @@
-import { addDays, weekNumberFor, weekStart, type ISODate } from '../domain/dates'
+import { addDays, weekStart, type ISODate } from '../domain/dates'
 import { movingAverage, weeklySlope } from '../domain/nutrition/targets'
-import { phaseForWeek } from '../domain/plan/generator'
 import { EMPTY_MARKS, evaluateMilestones, projectWeight, trafficLight, type Marks, type MilestoneEvaluation, type Projection, type TrafficLight } from '../domain/progress/rules'
 import type { Phase } from '../domain/types'
 import { db, type Profile } from './db'
 import { getAlarm, guardrailInput } from './guardrails'
 import { evaluateAmbition } from '../domain/guardrails/ambition'
-import { planStartFor } from './plan'
+import { phaseOf, planStartFor, planWeeksFor, weekOf } from './plan'
+import { goalOf } from '../domain/goals'
 
 export type SportGroup = 'swim' | 'bike' | 'strength' | 'run' | 'other'
 /** Orden de apilado validado para daltonismo: azul, naranja, morado, rosa (+ gris). */
@@ -40,7 +40,7 @@ const avg = (xs: (number | undefined | null)[]) => {
 /** Estadísticas por semana del plan, de la 1 a la actual. */
 export async function weeklyStats(profile: Profile, today: ISODate): Promise<WeekStats[]> {
   const planStart = planStartFor(profile)
-  const current = weekNumberFor(planStart, today) ?? 0
+  const current = weekOf(profile, today) ?? (today > planStart ? planWeeksFor(profile) : 0)
   if (current < 1) return []
   const end = addDays(weekStart(planStart, current), 6)
   const [sessions, weeks, logs, meals, checkins, alarm] = await Promise.all([
@@ -83,7 +83,7 @@ export async function weeklyStats(profile: Profile, today: ISODate): Promise<Wee
     out.push({
       week: w,
       start,
-      phase: phaseForWeek(w),
+      phase: phaseOf(profile, w),
       isRecovery: weeks.find((x) => x.weekNumber === w)?.isRecovery ?? false,
       minutes,
       km,
@@ -146,7 +146,8 @@ export async function computeMarks(profile: Profile): Promise<Marks> {
 
 export async function milestoneStatus(profile: Profile, today: ISODate): Promise<MilestoneEvaluation[]> {
   const planStart = planStartFor(profile)
-  const currentWeek = weekNumberFor(planStart, today) ?? (today < planStart ? 0 : 51)
+  if (goalOf(profile).type !== 'triathlon') return []
+  const currentWeek = weekOf(profile, today) ?? (today < planStart ? 0 : 51)
   const marks = await computeMarks(profile)
   let adherenceFirst4: number | null = null
   if (currentWeek >= 1) {
@@ -169,6 +170,6 @@ export async function weightSeries(profile: Profile, today: ISODate): Promise<We
   const average = movingAverage(points).map((p) => ({ date: p.date, kg: Math.round(p.kg * 10) / 10 }))
   const currentKg = average.at(-1)?.kg ?? profile.startWeightKg
   const slope = weeklySlope(points.filter((p) => p.date >= addDays(today, -28)), 28)
-  const week = weekNumberFor(planStartFor(profile), today) ?? 1
+  const week = weekOf(profile, today) ?? 1
   return { points, average, currentKg, projection: slope != null ? projectWeight(currentKg, week, slope, profile.goalWeightKg) : null }
 }

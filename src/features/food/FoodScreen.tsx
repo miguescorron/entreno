@@ -3,10 +3,9 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import { db, type MealLog } from '../../db/db'
 import { addWater, mealTypeForNow, saveTemplate } from '../../db/food'
-import { addDays, formatDayLong, weekNumberFor, type ISODate } from '../../domain/dates'
+import { addDays, formatDayLong, type ISODate } from '../../domain/dates'
 import { fmt1, scaleMacros, sumMacros } from '../../domain/nutrition/foods'
 import { fuelingAdvice } from '../../domain/nutrition/targets'
-import { phaseForWeek } from '../../domain/plan/generator'
 import { Button, Pressable } from '../../ui/Button'
 import { Field, NumberInput } from '../../ui/Controls'
 import { Icon } from '../../ui/Icon'
@@ -14,6 +13,7 @@ import { spring } from '../../ui/motion'
 import { Screen } from '../../ui/Screen'
 import { Sheet } from '../../ui/Sheet'
 import { useToast } from '../../ui/Toast'
+import { phaseOf, weekOf } from '../../db/plan'
 import { usePlanContext } from '../hooks'
 import { AddFoodSheet, MEAL_TYPES, SourceTag, type AddMode } from './AddFoodSheet'
 import { mealLabel } from '../../domain/nutrition/ideas'
@@ -22,7 +22,7 @@ import { DAY_TYPE_LABEL, MacroSummary } from './MacroSummary'
 import { useDayNutrition, useNutritionBootstrap } from './useNutrition'
 
 export function FoodScreen() {
-  const { today, planStart } = usePlanContext()
+  const { today, profile } = usePlanContext()
   const [date, setDate] = useState<ISODate>(today)
   const [adding, setAdding] = useState<AddMode | null>(null)
   const [editing, setEditing] = useState<MealLog | null>(null)
@@ -40,7 +40,7 @@ export function FoodScreen() {
 
   const sessions = useLiveQuery(() => db.planSessions.where('date').equals(date).toArray(), [date]) ?? []
   const longest = Math.max(0, ...sessions.filter((s) => s.status !== 'skipped').map((s) => s.durationMin))
-  const fuel = fuelingAdvice(longest, phaseForWeek(weekNumberFor(planStart, date) ?? 1))
+  const fuel = fuelingAdvice(longest, phaseOf(profile, weekOf(profile, date) ?? 1))
 
   const byMeal = useMemo(() => MEAL_TYPES.map((t) => ({ ...t, items: (meals ?? []).filter((m) => m.mealType === t.value) })), [meals])
 

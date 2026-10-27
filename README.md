@@ -1,6 +1,6 @@
-# Entreno 70.3
+# Entreno
 
-App personal de entrenamiento y nutrición con un objetivo: terminar el **ICAN Gandía 70.3** (octubre de 2027) sano y sin lesiones.
+App personal de entrenamiento y nutrición que se adapta a tu objetivo: **fuerza y tono, perder peso, carrera a pie (5K a maratón), Hyrox o triatlón 70.3**, a tu nivel, tu material y tu tiempo.
 
 Es una **PWA**: una web que se instala en el iPhone desde Safari y se abre como una app, a pantalla completa y sin conexión. No hay servidor propio: los datos viven en el móvil (IndexedDB) y la IA se llama directamente a la API de Claude con tu clave.
 
@@ -23,8 +23,10 @@ Es una **PWA**: una web que se instala en el iPhone desde Safari y se abre como 
 src/
   domain/          lógica pura con tests (sin React)
     dates.ts       fechas de Madrid, semana empieza en lunes, S1 = 50 semanas antes de la carrera
-    plan/          generador del plan de 51 semanas (spec §7)
-    milestones.ts  hitos H0-H6 y carreras preparatorias
+    plan/          generador por objetivo (goalPlans.ts) y el del 70.3 de 51 semanas (generator.ts)
+    goals.ts       objetivo del usuario, duración y fases del plan
+    exercises.ts   biblioteca de ejercicios con técnica y variantes
+    milestones.ts  hitos H0-H6 y carreras preparatorias (triatlón)
     nutrition/     objetivos de kcal/macros, ajuste adaptativo y base de alimentos (spec §10)
     guardrails/    freno de ambición (§8.4) y detección de señales de alarma
     progress/      reglas de hitos, semáforo y proyección
@@ -89,6 +91,8 @@ Si alguna de estas limitaciones llega a molestar, la lógica de `src/domain` y `
 - [x] **Fase D**: gráficos propios en SVG (peso con media de 7 días y objetivo, volumen por deporte en horas/km, carga, sueño y energía) con tooltip y vista de tabla; semáforo semanal (§8.5) e hitos H0-H6 evaluados por reglas con su razón (§6); proyección de peso; pruebas de control y marcas; revisión semanal con Claude cuyos ajustes llegan como propuestas; recordatorios dentro de la app.
 - [x] **Ideas de comida**: 3 platos caseros reales (con la receta en la que se basan), rápidos y ajustados a las kcal y macros que quedan para esa comida; filtro en código de alergias por familias (los 14 alérgenos de la UE) y de calorías (±15 %). Modo «solo comida real» (estilo realfooding) que descarta ultraprocesados.
 - [x] **Grado de procesado (NOVA)** al escanear códigos de barras, con aviso si es ultraprocesado.
+- [x] **Objetivos múltiples**: onboarding por objetivo (fuerza/tono, perder peso, carrera, Hyrox, triatlón), nivel de partida, material (gimnasio, casa con mancuernas o sin material) y minutos por sesión. Planes de duración variable con progresión y descargas.
+- [x] **Sesiones detalladas**: cada sesión con calentamiento, parte principal y vuelta a la calma; biblioteca de ~60 ejercicios con técnica paso a paso, claves, errores típicos, versión más fácil/difícil y enlace a vídeo.
 - [ ] Fase E: voz, menú semanal y lista de la compra.
 - [ ] Fase F: pulido, accesibilidad, backups automáticos.
 

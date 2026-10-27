@@ -49,9 +49,9 @@ export function weekStart(planStart: ISODate, week: number): ISODate {
 }
 
 /** Número de semana del plan (1..51) para una fecha, o null si está fuera. */
-export function weekNumberFor(planStart: ISODate, d: ISODate): number | null {
+export function weekNumberFor(planStart: ISODate, d: ISODate, weeks = PLAN_WEEKS): number | null {
   const n = Math.floor(diffDays(d, planStart) / 7) + 1
-  return n >= 1 && n <= PLAN_WEEKS ? n : null
+  return n >= 1 && n <= weeks ? n : null
 }
 
 export const WEEKDAYS_SHORT = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
