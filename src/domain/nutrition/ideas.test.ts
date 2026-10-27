@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bannedTerms, fitsBudget, mealBudget, violates } from './ideas'
+import { bannedTerms, fitsBudget, mealBudget, mealLabel, ULTRAPROCESSED_TERMS, violates } from './ideas'
 
 const remaining = { kcal: 1500, protein: 120, carbs: 150, fat: 50 }
 
@@ -50,5 +50,21 @@ describe('alergias y vetos', () => {
     const banned = bannedTerms('marisco, nueces')
     expect(violates('Ensalada con NUECES y queso', banned)).toBe('nueces')
     expect(violates('Arroz con pollo y verduras', banned)).toBeNull()
+  })
+})
+
+describe('modo comida real', () => {
+  it('descarta ultraprocesados y deja pasar buenos procesados', () => {
+    expect(violates('Wrap de pavo con salsa', ULTRAPROCESSED_TERMS)).toBe('wrap')
+    expect(violates('Macarrones con tomate frito y salchichas', ULTRAPROCESSED_TERMS)).toBe('salchicha')
+    expect(violates('Garbanzos de bote con espinacas y AOVE', ULTRAPROCESSED_TERMS)).toBeNull()
+    expect(violates('Ensalada de atún al natural', ULTRAPROCESSED_TERMS)).toBeNull()
+  })
+})
+
+describe('nombres de comidas', () => {
+  it('usa el artículo correcto', () => {
+    expect(mealLabel('comida')).toBe('la comida')
+    expect(mealLabel('desayuno')).toBe('el desayuno')
   })
 })

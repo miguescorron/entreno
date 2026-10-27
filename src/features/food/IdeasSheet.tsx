@@ -6,7 +6,7 @@ import { generateIdeas, type Idea } from '../../ai/ideas'
 import { db, getSetting, setSetting, type MealLog } from '../../db/db'
 import { addMeals, mealTypeForNow, saveTemplate } from '../../db/food'
 import { addDays, type ISODate } from '../../domain/dates'
-import { fmt1, type Macros } from '../../domain/nutrition/foods'
+import { fmt1, normalize, type Macros } from '../../domain/nutrition/foods'
 import { mealBudget, mealLabel, type MealType } from '../../domain/nutrition/ideas'
 import type { DayType } from '../../domain/nutrition/targets'
 import { Button } from '../../ui/Button'
@@ -50,6 +50,7 @@ export function IdeasSheet({ open, onClose, date, remaining, meals, dayType }: P
   const auto = useMealBudget(remaining, meals, mealType)
   const [kcal, setKcal] = useState<number | undefined>(auto.kcal)
   const [quick, setQuick] = useState(true)
+  const realfooding = useLiveQuery(() => getSetting('realfooding', true)) ?? true
   const [craving, setCraving] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,8 +74,8 @@ export function IdeasSheet({ open, onClose, date, remaining, meals, dayType }: P
     setBusy(true)
     setError(null)
     try {
-      const r = await generateIdeas({ profile, mealType, budget, quick, craving: craving.trim() || undefined, dayType, recentMeals: recent })
-      if (!r.ideas.length) throw new Error('Ninguna idea pasó el filtro de alergias. Prueba otra vez.')
+      const r = await generateIdeas({ profile, mealType, budget, quick, craving: craving.trim() || undefined, dayType, recentMeals: recent, realfooding })
+      if (!r.ideas.length) throw new Error('Ninguna idea pasó el filtro de alergias y ultraprocesados. Prueba otra vez.')
       const saved = { key, ideas: r.ideas, budgetKcal: budget.kcal }
       setResult(saved)
       await setSetting('mealIdeas', saved)
@@ -120,6 +121,13 @@ export function IdeasSheet({ open, onClose, date, remaining, meals, dayType }: P
             <span className="grow t-body">Rápidas (15 min o menos)</span>
             <Switch label="Rápidas" checked={quick} onChange={setQuick} />
           </div>
+          <div className="row">
+            <span className="grow">
+              <span className="t-body">Solo comida real</span>
+              <span className="t-foot muted" style={{ display: 'block' }}>Sin ultraprocesados, estilo realfooding</span>
+            </span>
+            <Switch label="Solo comida real" checked={realfooding} onChange={(v) => setSetting('realfooding', v)} />
+          </div>
         </div>
 
         <Field label="¿Qué te apetece o qué tienes en la nevera? (opcional)">
@@ -142,7 +150,8 @@ export function IdeasSheet({ open, onClose, date, remaining, meals, dayType }: P
             <motion.div key={`${result.key}-${i.nombre}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: n * 0.05 }} className="card stack" style={{ gap: 10 }}>
               <div>
                 <div className="t-title3">{i.nombre}</div>
-                <div className="t-sub muted">{i.gancho}</div>
+                <div className="t-sub muted">{i.descripcion}</div>
+                {i.basada_en && normalize(i.basada_en) !== normalize(i.nombre) && <div className="t-foot faint">Versión de: {i.basada_en}</div>}
               </div>
               <div className="row wrap" style={{ gap: 6 }}>
                 <span className="pill num">{i.tiempo_min} min</span>

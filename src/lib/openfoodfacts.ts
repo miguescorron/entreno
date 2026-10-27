@@ -13,6 +13,7 @@ const OffSchema = z.object({
       product_name: z.string().optional(),
       brands: z.string().optional(),
       serving_quantity: num,
+      nova_group: num,
       nutriments: z
         .object({
           'energy-kcal_100g': num,
@@ -38,7 +39,7 @@ export async function lookupBarcode(code: string): Promise<FoodItem> {
   const local = await db.foodItems.where('barcode').equals(code).first()
   if (local) return local
 
-  const res = await fetch(`${OFF_URL}/${encodeURIComponent(code)}.json?fields=product_name,product_name_es,brands,serving_quantity,nutriments`)
+  const res = await fetch(`${OFF_URL}/${encodeURIComponent(code)}.json?fields=product_name,product_name_es,brands,serving_quantity,nova_group,nutriments`)
   if (!res.ok && res.status !== 404) throw new Error('Open Food Facts no responde. Prueba más tarde.')
   const data = OffSchema.parse(await res.json())
   const p = data.product
@@ -57,6 +58,7 @@ export async function lookupBarcode(code: string): Promise<FoodItem> {
     servingGrams: p.serving_quantity && p.serving_quantity > 0 ? p.serving_quantity : undefined,
     source: 'off',
     barcode: code,
+    novaGroup: p.nova_group && [1, 2, 3, 4].includes(p.nova_group) ? (p.nova_group as 1 | 2 | 3 | 4) : undefined,
   }
   item.id = await db.foodItems.add(item)
   return item

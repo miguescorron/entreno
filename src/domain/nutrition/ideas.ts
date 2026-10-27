@@ -90,3 +90,39 @@ export function violates(text: string, banned: string[]): string | null {
   const t = normalize(text)
   return banned.find((b) => new RegExp(`\\b${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(t)) ?? null
 }
+
+/**
+ * Ultraprocesados habituales que el modo realfooding no admite en una idea.
+ * Los "buenos procesados" (legumbre de bote, conservas al natural, AOVE,
+ * yogur natural, verdura congelada) sí se permiten.
+ */
+export const ULTRAPROCESSED_TERMS = [
+  'pan de molde',
+  'wrap',
+  'tortilla de trigo',
+  'surimi',
+  'nugget',
+  'salchicha',
+  'frankfurt',
+  'bacon',
+  'beicon',
+  'chopped',
+  'mortadela',
+  'fiambre',
+  'ketchup',
+  'kétchup',
+  'salsa barbacoa',
+  'tomate frito',
+  'mayonesa comercial',
+  'refresco',
+  'zumo envasado',
+  'cereales de desayuno',
+  'galleta',
+  'bolleria',
+  'croissant',
+  'margarina',
+  'pastilla de caldo',
+  'caldo en pastilla',
+  'sirope',
+  'precocinad',
+].map(normalize)

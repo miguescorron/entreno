@@ -64,12 +64,12 @@ describe('Open Food Facts', () => {
       ok: true,
       json: async () => ({
         status: 1,
-        product: { product_name: 'Yogur griego', brands: 'Marca, Otra', serving_quantity: '125', nutriments: { 'energy-kcal_100g': 97, proteins_100g: 6, carbohydrates_100g: 4, fat_100g: 6.5 } },
+        product: { product_name: 'Yogur griego', brands: 'Marca, Otra', serving_quantity: '125', nova_group: 3, nutriments: { 'energy-kcal_100g': 97, proteins_100g: 6, carbohydrates_100g: 4, fat_100g: 6.5 } },
       }),
     })
     vi.stubGlobal('fetch', fetchMock)
     const item = await lookupBarcode('8410000000000')
-    expect(item).toMatchObject({ name: 'Yogur griego', brand: 'Marca', kcal100g: 97, servingGrams: 125, source: 'off' })
+    expect(item).toMatchObject({ name: 'Yogur griego', brand: 'Marca', kcal100g: 97, servingGrams: 125, source: 'off', novaGroup: 3 })
     await lookupBarcode('8410000000000')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })

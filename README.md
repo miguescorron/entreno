@@ -87,7 +87,8 @@ Si alguna de estas limitaciones llega a molestar, la lógica de `src/domain` y `
 - [x] **Fase B**: objetivos diarios de kcal y macros (§10) con ajuste adaptativo semanal, diario por comidas, foto del plato / etiqueta / texto → macros con Claude (JSON validado con zod), código de barras con Open Food Facts, base local de alimentos, favoritos, porciones aprendidas e hidratación.
 - [x] **Fase C**: coach con Claude (Sonnet 5.5): chat con streaming, 9 herramientas (registrar entrenos, no entrenos, check-ins y comidas, consultar progreso y plan, proponer cambios, hitos, señal de alarma), tarjetas con deshacer, propuestas que se aceptan o rechazan, memoria resumida por sesiones, caché de prompt, freno de ambición en código (§8.4) con confirmación explícita y aviso fijo ante señales de alarma.
 - [x] **Fase D**: gráficos propios en SVG (peso con media de 7 días y objetivo, volumen por deporte en horas/km, carga, sueño y energía) con tooltip y vista de tabla; semáforo semanal (§8.5) e hitos H0-H6 evaluados por reglas con su razón (§6); proyección de peso; pruebas de control y marcas; revisión semanal con Claude cuyos ajustes llegan como propuestas; recordatorios dentro de la app.
-- [x] **Ideas de comida**: 3 propuestas rápidas y con gracia ajustadas a las kcal y macros que quedan para esa comida; filtro en código de alergias por familias (los 14 alérgenos de la UE) y de calorías (±15 %).
+- [x] **Ideas de comida**: 3 platos caseros reales (con la receta en la que se basan), rápidos y ajustados a las kcal y macros que quedan para esa comida; filtro en código de alergias por familias (los 14 alérgenos de la UE) y de calorías (±15 %). Modo «solo comida real» (estilo realfooding) que descarta ultraprocesados.
+- [x] **Grado de procesado (NOVA)** al escanear códigos de barras, con aviso si es ultraprocesado.
 - [ ] Fase E: voz, menú semanal y lista de la compra.
 - [ ] Fase F: pulido, accesibilidad, backups automáticos.
 

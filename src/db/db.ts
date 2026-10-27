@@ -135,6 +135,8 @@ export interface FoodItem {
   usualGrams?: number
   servingGrams?: number
   lastUsedAt?: string
+  /** Grado de procesado NOVA (1 sin procesar … 4 ultraprocesado), de Open Food Facts */
+  novaGroup?: 1 | 2 | 3 | 4
 }
 
 export interface MealLog {

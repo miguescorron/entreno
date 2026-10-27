@@ -53,6 +53,24 @@ interface ReviewState {
 
 const SOURCE_LABEL: Record<string, string> = { ai: 'IA', off: 'OFF', manual: 'Manual', base: 'Base' }
 
+const NOVA: Record<1 | 2 | 3 | 4, { label: string; color: string; advice?: string }> = {
+  1: { label: 'Comida real', color: 'var(--green)' },
+  2: { label: 'Ingrediente culinario', color: 'var(--green)' },
+  3: { label: 'Procesado', color: 'var(--orange)', advice: 'Procesado: revisa los ingredientes; puede ser un buen procesado si son pocos y reconocibles.' },
+  4: { label: 'Ultraprocesado', color: 'var(--red)', advice: 'Ultraprocesado: mejor como algo puntual que como base de tu dieta.' },
+}
+
+/** Grado de procesado (NOVA) con etiqueta, nunca solo color. */
+export function NovaTag({ group }: { group?: 1 | 2 | 3 | 4 }) {
+  if (!group) return null
+  const n = NOVA[group]
+  return (
+    <span className="source-tag" style={{ color: n.color, background: `color-mix(in srgb, ${n.color} 14%, transparent)` }} title={`NOVA ${group}`}>
+      {n.label}
+    </span>
+  )
+}
+
 export function SourceTag({ source }: { source?: string }) {
   if (!source) return null
   return <span className="source-tag" title={source === 'off' ? 'Open Food Facts' : undefined}>{SOURCE_LABEL[source] ?? source}</span>
@@ -76,7 +94,12 @@ export function AddFoodSheet({ open, onClose, date, initialMode = 'menu' }: Prop
   const toast = useToast()
   const reduce = useReducedMotion()
 
-  useEffect(() => {
+  // Al abrir, se reinicia en el mismo render (no en un efecto): así la hoja
+  // aparece ya en el paso pedido, sin pasar un instante por el menú.
+  const [openedWith, setOpenedWith] = useState<string | null>(null)
+  const openKey = open ? initialMode : null
+  if (openKey !== openedWith) {
+    setOpenedWith(openKey)
     if (open) {
       setStep(initialMode)
       setMealType(mealTypeForNow())
@@ -85,7 +108,7 @@ export function AddFoodSheet({ open, onClose, date, initialMode = 'menu' }: Prop
       setError(null)
       setBusy(null)
     }
-  }, [open, initialMode])
+  }
 
   const go = useCallback((s: Step, d = 1) => {
     setDir(d)
@@ -446,6 +469,7 @@ function SearchStep({ onPick, onManual }: { onPick: (f: FoodItem) => void; onMan
               <div className="t-callout">{f.name}{f.brand && <span className="muted"> · {f.brand}</span>}</div>
               <div className="t-foot muted num">{f.kcal100g} kcal/100 g{f.usualGrams ? ` · sueles tomar ${f.usualGrams} g` : ''}</div>
             </div>
+            <NovaTag group={f.novaGroup} />
             <SourceTag source={f.source} />
           </Pressable>
         ))}
@@ -476,8 +500,16 @@ function GramsStep({ food, inReview, onAdd }: { food: FoodItem; inReview: boolea
           <div className="t-headline">{food.name}</div>
           {food.brand && <div className="t-sub muted">{food.brand}</div>}
         </div>
-        <SourceTag source={food.source} />
+        <span className="row" style={{ gap: 6 }}>
+          <NovaTag group={food.novaGroup} />
+          <SourceTag source={food.source} />
+        </span>
       </div>
+      {food.novaGroup && NOVA[food.novaGroup].advice && (
+        <div className="banner" style={{ padding: '10px 12px' }}>
+          <span className="t-foot">{NOVA[food.novaGroup].advice}</span>
+        </div>
+      )}
       <div className="t-foot muted num">
         Por 100 g: {food.kcal100g} kcal · P {fmt1(food.protein100g)} g · H {fmt1(food.carbs100g)} g · G {fmt1(food.fat100g)} g
       </div>

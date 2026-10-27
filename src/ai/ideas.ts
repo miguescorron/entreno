@@ -2,16 +2,18 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { z } from 'zod'
 import type { Profile } from '../db/db'
 import type { DayType } from '../domain/nutrition/targets'
-import { bannedTerms, fitsBudget, mealLabel, violates, type Budget, type MealType } from '../domain/nutrition/ideas'
+import { bannedTerms, fitsBudget, mealLabel, ULTRAPROCESSED_TERMS, violates, type Budget, type MealType } from '../domain/nutrition/ideas'
 import { getClient, getMainModel } from './client'
 import { structured } from './structured'
 
-// Ideas de comida rápidas y con gracia, ajustadas a lo que queda del día.
-// El modelo propone; el código comprueba calorías y alergias antes de enseñarlas.
+// Ideas de comida: platos caseros que existen de verdad, rápidos y ajustados a
+// lo que queda del día. El modelo propone; el código comprueba calorías,
+// alergias y (en modo realfooding) ultraprocesados antes de enseñarlas.
 
 export const IdeaSchema = z.object({
-  nombre: z.string(),
-  gancho: z.string().describe('Una frase con gracia que la venda'),
+  nombre: z.string().describe('Nombre normal del plato, sin juegos de palabras'),
+  basada_en: z.string().describe('Receta tradicional conocida en la que se basa'),
+  descripcion: z.string().describe('Una frase: por qué está bueno o por qué viene bien hoy'),
   tiempo_min: z.number(),
   ingredientes: z.array(z.object({ nombre: z.string(), cantidad: z.string(), gramos: z.number() })),
   pasos: z.array(z.string()),
@@ -33,16 +35,23 @@ export interface IdeasRequest {
   craving?: string
   dayType: DayType
   recentMeals: string[]
+  realfooding: boolean
 }
 
-const SYSTEM = `Eres un cocinero y nutricionista deportivo con mucha chispa. Propones comidas rápidas, ricas y fáciles para un triatleta aficionado en España.
+const SYSTEM = `Eres cocinero de cocina casera española y mediterránea y nutricionista deportivo. Propones comidas para un triatleta aficionado en España.
 Reglas:
-- Cocina mediterránea y española de diario, con ingredientes de cualquier supermercado (Mercadona, Lidl, Carrefour). Nada de ingredientes raros.
-- Nombres con gracia y gancho (juegos de palabras, guiños deportivos), pero que se entienda qué es.
-- Ajusta cada idea a las calorías y macros indicadas: usa gramos reales y calcula los macros con tablas españolas (BEDCA), incluido el aceite.
+- Solo platos que existen de verdad y que cualquiera reconocería en una casa o en un menú del día en España. Por ejemplo: lentejas estofadas, garbanzos con espinacas, merluza en salsa verde, pollo al ajillo, tortilla de calabacín, ensalada de garbanzos con atún, revuelto de espárragos, salmón a la plancha con patata asada, crema de calabaza, arroz con pollo y verduras, huevos rotos con pimientos. Valen versiones rápidas (legumbre de bote, microondas, sartén).
+- Nada de inventos ni fusiones raras: combina solo ingredientes que se comen juntos de forma clásica. Una proteína principal por plato, salvo combinaciones tradicionales. Pescado con legumbre solo si es una receta tradicional conocida (potaje de vigilia con bacalao); nunca cosas como merluza con lentejas.
+- nombre: el nombre normal del plato, como en una carta. Sin juegos de palabras, chistes ni referencias deportivas.
+- basada_en: la receta tradicional en la que se basa.
+- descripcion: una frase sencilla sobre por qué está bueno o por qué le viene bien hoy.
+- Ingredientes de cualquier supermercado (Mercadona, Lidl, Carrefour).
+- Ajusta cada idea a las calorías y macros indicadas: gramos reales y macros calculados con tablas españolas (BEDCA), incluido el aceite.
 - Prioriza la proteína. Variedad: no repitas platos recientes ni la misma base en dos ideas.
 - Pasos cortos y claros, como mucho 5, de una línea cada uno. Ingredientes: como mucho 7. Tiempo real de preparación.
 - Respeta estrictamente las alergias y los alimentos que no come: ni como ingrediente ni como trazas obvias.`
+
+const REALFOODING = `Modo comida real (realfooding): solo alimentos frescos o mínimamente procesados. Se permiten buenos procesados: legumbre cocida de bote, conservas de pescado al natural o en aceite de oliva, aceite de oliva virgen extra, yogur natural sin azúcar, queso fresco, pan 100 % integral, verdura congelada, tomate triturado natural, chocolate de más del 85 %. Prohibidos los ultraprocesados: pan de molde, wraps o tortillas de trigo industriales, embutidos y fiambres, salchichas, surimi, salsas comerciales (ketchup, tomate frito, barbacoa), cereales de desayuno, galletas, bollería, refrescos, zumos envasados, margarina y pastillas de caldo.`
 
 export async function generateIdeas(r: IdeasRequest): Promise<{ ideas: Idea[]; discarded: number }> {
   const client = await getClient()
@@ -58,6 +67,7 @@ export async function generateIdeas(r: IdeasRequest): Promise<{ ideas: Idea[]; d
     r.profile.dietNotes ? `Preferencias: ${r.profile.dietNotes}` : '',
     r.craving ? `Le apetece o tiene en la nevera: ${r.craving}` : '',
     r.recentMeals.length ? `Ha comido estos días (no repitas): ${r.recentMeals.slice(0, 20).join('; ')}.` : '',
+    r.realfooding ? REALFOODING : '',
   ]
     .filter(Boolean)
     .join('\n')
@@ -77,8 +87,9 @@ export async function generateIdeas(r: IdeasRequest): Promise<{ ideas: Idea[]; d
     { refusal: 'No se han podido generar ideas. Prueba con otra petición.' },
   )
 
-  // Filtro en código: nada que choque con alergias o vetos
-  const safe = out.ideas.filter((i) => !violates([i.nombre, i.gancho, ...i.ingredientes.map((x) => x.nombre), ...i.pasos].join(' '), banned))
+  // Filtro en código: nada que choque con alergias o vetos, ni ultraprocesados en modo realfooding
+  const veto = r.realfooding ? [...banned, ...ULTRAPROCESSED_TERMS] : banned
+  const safe = out.ideas.filter((i) => !violates([i.nombre, i.basada_en, i.descripcion, ...i.ingredientes.map((x) => x.nombre), ...i.pasos].join(' '), veto))
   const ideas = safe
     .map((i) => ({ ...i, kcal: Math.round(i.kcal), tiempo_min: Math.round(i.tiempo_min), fits: r.budget.kcal > 0 ? fitsBudget(i.kcal, r.budget.kcal) : true }))
     // Primero las que encajan en calorías
