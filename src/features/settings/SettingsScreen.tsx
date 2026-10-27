@@ -11,6 +11,7 @@ import { Screen } from '../../ui/Screen'
 import { Sheet } from '../../ui/Sheet'
 import { useToast } from '../../ui/Toast'
 import { aiErrorMessage, testConnection } from '../../ai/client'
+import { getTheme, setTheme, type ThemePref } from '../../lib/theme'
 import { useCurrentProfile } from '../hooks'
 import { ProfileSection, SECTIONS, validateSection, type ProfileDraft, type SectionKey } from '../profile/ProfileForm'
 
@@ -24,6 +25,7 @@ export function SettingsScreen() {
   const [section, setSection] = useState<SectionKey | null>(null)
   const toast = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
+  const [theme, setThemeState] = useState<ThemePref>(getTheme)
   const onImport = async (file?: File) => {
     if (!file) return
     try {
@@ -50,6 +52,26 @@ export function SettingsScreen() {
 
         <Group title="Carrera" foot="Si cambias la fecha, las horas o los días, las sesiones pendientes se recalculan. Las hechas se conservan.">
           <Cell label={profile.raceName} value={formatDate(profile.raceDate)} onClick={() => setSection('race')} />
+        </Group>
+
+        <Group title="Apariencia">
+          <div className="cell">
+            <span className="t-body" style={{ flex: 'none' }}>Tema</span>
+            <div className="grow">
+              <Segmented
+                value={theme}
+                onChange={(v) => {
+                  setThemeState(v)
+                  setTheme(v)
+                }}
+                options={[
+                  { value: 'system', label: 'Automático' },
+                  { value: 'light', label: 'Claro' },
+                  { value: 'dark', label: 'Oscuro' },
+                ]}
+              />
+            </div>
+          </div>
         </Group>
 
         <AiSettings />
