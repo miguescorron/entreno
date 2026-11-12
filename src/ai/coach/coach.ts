@@ -6,6 +6,7 @@ import { phaseName, phaseOf, planStartFor, planWeeksFor, weekOf } from '../../db
 import { formatDate, formatDayLong, type ISODate } from '../../domain/dates'
 import { detectAlarmSignals } from '../../domain/guardrails/ambition'
 import { getClient, getMainModel, MODEL_FAST } from '../client'
+import { blobToBase64 } from '../../lib/image'
 import { buildSystemPrompt, SUMMARY_PROMPT } from './prompt'
 import { makeTools, runTool, type ToolContext } from './tools'
 
@@ -28,6 +29,21 @@ interface CoachSession {
 const SESSION_KEY = 'coachSession'
 const MAX_SESSION_MESSAGES = 40
 const MAX_SESSION_CHARS = 150_000
+/** Las fotos se reenvían en cada petición: a partir de este número se resume la sesión */
+const MAX_SESSION_IMAGES = 6
+export const MAX_PHOTOS_PER_MESSAGE = 3
+
+type ImageBlock = { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+
+/** Fotos de un mensaje como URLs data: para mostrarlas en el chat. */
+export function imagesOf(m: Pick<ChatMessage, 'blocks'>): string[] {
+  return ((m.blocks ?? []) as ImageBlock[]).filter((b) => b?.type === 'image' && b.source?.type === 'base64').map((b) => `data:${b.source.media_type};base64,${b.source.data}`)
+}
+
+/** Tamaño del texto de la sesión sin contar los datos de las fotos. */
+function textSize(rows: ChatMessage[]): number {
+  return rows.reduce((a, r) => a + JSON.stringify(r.blocks ?? '', (k, v) => (k === 'data' && typeof v === 'string' && v.length > 1000 ? '' : v)).length, 0)
+}
 const MAX_TOOL_ROUNDS = 8
 
 const hashProfile = (p: Profile) => JSON.stringify({ ...p, id: undefined, createdAt: undefined })
@@ -45,10 +61,11 @@ function toApiMessages(rows: ChatMessage[]): MessageParam[] {
 /** Texto de la sesión para resumirla (lo visible + lo guardado). */
 function transcript(rows: ChatMessage[]): string {
   return rows
-    .filter((r) => r.role !== 'tool' && (r.text || r.actions?.length))
+    .filter((r) => r.role !== 'tool' && (r.text || r.actions?.length || imagesOf(r).length))
     .map((r) => {
       const acts = r.actions?.filter((a) => !a.undone).map((a) => `[${a.kind}] ${a.summary}`) ?? []
-      return `${r.role === 'user' ? 'Atleta' : 'Coach'} (${r.ts.slice(0, 10)}): ${r.text}${acts.length ? `\n  ${acts.join('\n  ')}` : ''}`
+      const photos = imagesOf(r).length
+      return `${r.role === 'user' ? 'Atleta' : 'Coach'} (${r.ts.slice(0, 10)}): ${r.text}${photos ? ` [${photos === 1 ? 'una foto' : `${photos} fotos`}]` : ''}${acts.length ? `\n  ${acts.join('\n  ')}` : ''}`
     })
     .join('\n')
 }
@@ -75,8 +92,8 @@ async function ensureSession(profile: Profile, today: ISODate): Promise<CoachSes
   const hash = hashProfile(profile)
   if (s) {
     const rows = await sessionMessages(s.id)
-    const size = rows.reduce((a, r) => a + JSON.stringify(r.blocks ?? '').length, 0)
-    const full = rows.length >= MAX_SESSION_MESSAGES || size > MAX_SESSION_CHARS
+    const images = rows.reduce((a, r) => a + imagesOf(r).length, 0)
+    const full = rows.length >= MAX_SESSION_MESSAGES || textSize(rows) > MAX_SESSION_CHARS || images >= MAX_SESSION_IMAGES
     if (!full && s.profileHash === hash) return s
     const summary = rows.length ? await summarize(s.summary, rows) : s.summary
     return newSession(profile, today, summary)
@@ -127,10 +144,12 @@ export interface SendOptions {
   today: ISODate
   /** Texto de la respuesta mientras llega (streaming) */
   onText?: (text: string) => void
+  /** Fotos ya comprimidas (JPEG) que acompañan al mensaje */
+  photos?: Blob[]
 }
 
 /** Envía un mensaje del usuario y ejecuta el bucle de herramientas hasta la respuesta final. */
-export async function sendToCoach(text: string, { profile, today, onText }: SendOptions): Promise<void> {
+export async function sendToCoach(text: string, { profile, today, onText, photos = [] }: SendOptions): Promise<void> {
   // Las señales de alarma se detectan también en código, sin depender del modelo
   const symptoms = detectAlarmSignals(text)
   if (symptoms.length) await raiseAlarm(symptoms, text)
@@ -147,7 +166,9 @@ export async function sendToCoach(text: string, { profile, today, onText }: Send
     sessionId: session.id,
     blocks: [
       { type: 'text', text: await contextBlock(profile, today) },
-      { type: 'text', text },
+      // Las fotos van antes del texto que las comenta
+      ...(await Promise.all(photos.slice(0, MAX_PHOTOS_PER_MESSAGE).map(async (p) => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: await blobToBase64(p) } })))),
+      { type: 'text', text: text.trim() || (photos.length > 1 ? 'Te mando estas fotos.' : 'Te mando esta foto.') },
     ],
   })
 

@@ -16,8 +16,14 @@ export async function exportData(): Promise<Backup> {
     const rows = (await db.table(name).toArray()) as Record<string, unknown>[]
     data[name] = name === 'settings' ? rows.filter((r) => !SECRET_SETTINGS.has(String(r.key))) : rows
   }
-  // Las fotos (Blob) no van en el JSON
+  // Las fotos no van en el JSON: ni las de las comidas ni las del chat
   data.mealLogs = data.mealLogs.map(({ photoBlob: _p, ...r }) => r)
+  data.chatMessages = data.chatMessages.map((r) => ({
+    ...r,
+    blocks: Array.isArray(r.blocks) ? r.blocks.map((b: { type?: string }) => (b?.type === 'image' ? { type: 'text', text: '[foto no incluida en la copia]' } : b)) : r.blocks,
+  }))
+  // La sesión del coach no se restaura: al importar, el chat empieza una conversación nueva
+  data.settings = data.settings.filter((r) => r.key !== 'coachSession')
   return { app: 'entreno', version: db.verno, exportedAt: new Date().toISOString(), data }
 }
 

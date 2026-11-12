@@ -2,7 +2,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { sendToCoach } from '../../ai/coach/coach'
+import { imagesOf, MAX_PHOTOS_PER_MESSAGE, sendToCoach } from '../../ai/coach/coach'
+import { compressImage } from '../../lib/image'
 import { aiErrorMessage } from '../../ai/client'
 import { db, getSetting, type ChatMessage } from '../../db/db'
 import { Button } from '../../ui/Button'
@@ -25,23 +26,51 @@ export function CoachScreen() {
   const [sending, setSending] = useState(false)
   const [streaming, setStreaming] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [photos, setPhotos] = useState<{ blob: Blob; url: string }[]>([])
+  const fileRef = useRef<HTMLInputElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const reduce = useReducedMotion()
 
-  const visible = messages.filter((m) => m.role !== 'tool' && (m.text || m.actions?.length))
+  const visible = messages.filter((m) => m.role !== 'tool' && (m.text || m.actions?.length || imagesOf(m).length))
+
+  const addPhotos = async (files: FileList | null) => {
+    if (!files) return
+    const room = MAX_PHOTOS_PER_MESSAGE - photos.length
+    const picked = [...files].slice(0, room)
+    try {
+      // Fotos más pequeñas que en Comida: se reenvían con cada mensaje de la conversación
+      const added = await Promise.all(picked.map(async (f) => {
+        const blob = await compressImage(f, 1024, 0.8)
+        return { blob, url: URL.createObjectURL(blob) }
+      }))
+      setPhotos((p) => [...p, ...added])
+    } catch {
+      setError('No he podido abrir esa foto.')
+    }
+    if (files.length > room) setError(`Como mucho ${MAX_PHOTOS_PER_MESSAGE} fotos por mensaje.`)
+  }
+
+  const removePhoto = (i: number) =>
+    setPhotos((p) => {
+      URL.revokeObjectURL(p[i].url)
+      return p.filter((_, k) => k !== i)
+    })
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'end' })
   }, [visible.length, streaming, sending, reduce])
 
   const send = async (text: string) => {
     const t = text.trim()
-    if (!t || sending) return
+    if ((!t && !photos.length) || sending) return
+    const sentPhotos = photos
     setDraft('')
+    setPhotos([])
     setSending(true)
     setError(null)
     setStreaming('')
     try {
-      await sendToCoach(t, { profile, today, onText: setStreaming })
+      await sendToCoach(t, { profile, today, onText: setStreaming, photos: sentPhotos.map((p) => p.blob) })
+      sentPhotos.forEach((p) => URL.revokeObjectURL(p.url))
     } catch (e) {
       setError(aiErrorMessage(e))
     } finally {
@@ -69,12 +98,12 @@ export function CoachScreen() {
 
   return (
     <Screen title="Coach">
-      <div className="stack" style={{ paddingBottom: 96 }}>
+      <div className="stack" style={{ paddingBottom: photos.length ? 176 : 96 }}>
         <AlarmBanner />
         {visible.length === 0 && !sending && (
           <div className="stack" style={{ padding: '8px 0 16px' }}>
             <p className="t-body muted" style={{ margin: 0 }}>
-              Cuéntame cómo te sientes, qué has entrenado o comido, o por qué no has podido. Lo apunto yo y te digo qué hacer.
+              Cuéntame cómo te sientes, qué has entrenado o comido, o por qué no has podido. También puedes mandarme fotos: tu plato, la pantalla del reloj, la báscula o cómo haces un ejercicio. Lo apunto yo y te digo qué hacer.
             </p>
             <div className="chips">
               {SUGGESTIONS.map((s) => (
@@ -118,11 +147,45 @@ export function CoachScreen() {
           send(draft)
         }}
       >
+        {photos.length > 0 && (
+          <div className="composer-photos">
+            {photos.map((p, i) => (
+              <div key={p.url} className="composer-thumb">
+                <img src={p.url} alt={`Foto ${i + 1} para el coach`} />
+                <button type="button" onClick={() => removePhoto(i)} aria-label={`Quitar foto ${i + 1}`}>
+                  <Icon name="close" size={12} strokeWidth={3} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="composer-row">
+        <motion.button
+          type="button"
+          className="icon-btn attach"
+          whileTap={{ scale: 0.9 }}
+          disabled={sending || photos.length >= MAX_PHOTOS_PER_MESSAGE}
+          onClick={() => fileRef.current?.click()}
+          aria-label="Añadir foto"
+        >
+          <Icon name="camera" size={20} />
+        </motion.button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            addPhotos(e.target.files)
+            e.target.value = ''
+          }}
+        />
         <textarea
           className="input"
           rows={1}
           value={draft}
-          placeholder="Escribe o dicta con el micrófono del teclado"
+          placeholder={photos.length ? 'Cuéntale qué es la foto (opcional)' : 'Escribe, dicta o manda una foto'}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) {
@@ -132,21 +195,35 @@ export function CoachScreen() {
           }}
           aria-label="Mensaje para el coach"
         />
-        <motion.button type="submit" className="icon-btn send" disabled={!draft.trim() || sending} whileTap={{ scale: 0.9 }} aria-label="Enviar">
+        <motion.button type="submit" className="icon-btn send" disabled={(!draft.trim() && !photos.length) || sending} whileTap={{ scale: 0.9 }} aria-label="Enviar">
           <Icon name="send" size={20} strokeWidth={2.2} />
         </motion.button>
+        </div>
       </form>
     </Screen>
   )
 }
 
 function Bubble({ m }: { m: ChatMessage }) {
-  if (m.role === 'user')
+  if (m.role === 'user') {
+    const imgs = imagesOf(m)
     return (
-      <div className="bubble user">
-        <span style={{ whiteSpace: 'pre-wrap' }}>{m.text}</span>
+      <div className="stack" style={{ gap: 6, alignItems: 'flex-end' }}>
+        {imgs.length > 0 && (
+          <div className="chat-photos">
+            {imgs.map((src, i) => (
+              <img key={i} src={src} alt={`Foto ${i + 1} enviada al coach`} loading="lazy" />
+            ))}
+          </div>
+        )}
+        {m.text && (
+          <div className="bubble user">
+            <span style={{ whiteSpace: 'pre-wrap' }}>{m.text}</span>
+          </div>
+        )}
       </div>
     )
+  }
   return (
     <div className="stack" style={{ gap: 8 }}>
       {m.text && (

@@ -395,7 +395,7 @@ input[type='range'].rpe { width: 100%; accent-color: var(--tint); height: 32px; 
 .bubble.assistant { align-self: flex-start; background: var(--bg-elevated); border-bottom-left-radius: 6px; }
 .composer {
   position: fixed; left: 0; right: 0; z-index: 25; bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 6px);
-  display: flex; align-items: flex-end; gap: 8px; max-width: 640px; margin: 0 auto; padding: 8px var(--gutter-r) 8px var(--gutter-l);
+  display: flex; flex-direction: column; gap: 8px; max-width: 640px; margin: 0 auto; padding: 8px var(--gutter-r) 8px var(--gutter-l);
   background: var(--material); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
 }
 .composer textarea { min-height: 40px; max-height: 140px; border-radius: 20px; padding: 9px 14px; resize: none; field-sizing: content; }
@@ -429,3 +429,17 @@ input[type='range'].rpe { width: 100%; accent-color: var(--tint); height: 32px; 
 .light-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px var(--bg-elevated); }
 
 a.btn { text-decoration: none; }
+
+.composer-row { display: flex; align-items: flex-end; gap: 8px; }
+.composer-row textarea { flex: 1; min-width: 0; }
+.composer .attach { width: 40px; height: 40px; border-radius: 20px; flex: none; }
+.composer .attach:disabled { opacity: 0.35; }
+.composer-photos { display: flex; gap: 8px; overflow-x: auto; padding-top: 4px; }
+.composer-thumb { position: relative; flex: none; width: 64px; height: 64px; }
+.composer-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block; }
+.composer-thumb button {
+  position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 11px; border: 0;
+  display: grid; place-items: center; background: var(--label); color: var(--bg);
+}
+.chat-photos { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; max-width: 85%; margin-left: auto; }
+.chat-photos img { width: 120px; height: 120px; object-fit: cover; border-radius: 16px; display: block; }
